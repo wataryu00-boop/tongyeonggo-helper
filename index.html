@@ -182,7 +182,7 @@ table.tt{border-collapse:separate;border-spacing:2px;width:100%;table-layout:fix
 
 /* Heatmap */
 .heat-wrap{margin-bottom:12px}
-.heatmap{display:grid;grid-template-columns:30px repeat(5,1fr);gap:3px}
+
 .heat-cell{padding:8px 2px;text-align:center;border-radius:6px;font-size:12px;font-weight:700;min-height:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:all .1s}
 .heat-cell:active{transform:scale(.95)}
 .heat-cell.hdr{background:#1a237e;color:#fff;cursor:default;font-size:11px}
@@ -926,13 +926,12 @@ const NAV_PRIMARY=[
   {id:"swap",icon:"🔄",label:"교체"},
   {id:"find",icon:"🔍",label:"공강"},
   {id:"myclass",icon:"🎯",label:"우리반"},
-  {id:"analysis",icon:"📊",label:"분석"}
+  {id:"night",icon:"🌙",label:"야자"}
 ];
 const NAV_MORE=[
   {id:"records",icon:"📝",label:"교체/대강 기록"},
   {id:"common",icon:"👥",label:"공통 공강"},
   {id:"room",icon:"🏫",label:"교실 현황"},
-  {id:"heatmap",icon:"🔥",label:"수업 밀도 히트맵"},
   {id:"event",icon:"🗓️",label:"행사 시수 계산"},
   {id:"view",icon:"📅",label:"개별 시간표 조회"}
 ];
@@ -995,7 +994,7 @@ function deptCounts(){const c={"전체":T.length};T.forEach(t=>{c[t.d]=(c[t.d]||
 
 // ========== Renderers ==========
 function renderTopbar(){
-  let tabInfo={swap:{t:"수업 교체",s:"내 수업을 다른 교사와 바꾸거나 대강 찾기"},find:{t:"시간별 공강",s:"특정 시간 공강 교사 찾기"},common:{t:"공통 공강",s:"여러 교사 동시 공강 시간"},myclass:{t:"우리반",s:"학급 시간표 조회"},room:{t:"교실 현황",s:"교실별 사용 현황"},heatmap:{t:"수업 밀도",s:"시간대별 수업량 분포"},event:{t:"행사 계산",s:"시험/행사 시수 변동 계산"},view:{t:"시간표 조회",s:"개별 교사 시간표"},records:{t:"교체/대강 기록",s:"날짜별 변경사항 관리"},admin:{t:"👑 관리자",s:"사용자 계정 관리"},night:{t:"🌙 야자 감독",s:"주간 감독표 조회 및 교체"}};
+  let tabInfo={swap:{t:"수업 교체",s:"내 수업을 다른 교사와 바꾸거나 대강 찾기"},find:{t:"시간별 공강",s:"특정 시간 공강 교사 찾기"},common:{t:"공통 공강",s:"여러 교사 동시 공강 시간"},myclass:{t:"우리반",s:"학급 시간표 조회"},room:{t:"교실 현황",s:"교실별 사용 현황"},event:{t:"행사 계산",s:"시험/행사 시수 변동 계산"},view:{t:"시간표 조회",s:"개별 교사 시간표"},records:{t:"교체/대강 기록",s:"날짜별 변경사항 관리"},admin:{t:"👑 관리자",s:"사용자 계정 관리"},night:{t:"🌙 야자 감독",s:"주간 감독표 조회 및 교체"}};
   const info=tabInfo[TAB]||{t:"교무도우미",s:""};
   const userBadge = CURRENT_USER && CURRENT_USER.teacherName 
     ? `<span style="background:#1a237e;color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;margin-right:4px">${CURRENT_USER.teacherName}</span>`
@@ -1969,7 +1968,6 @@ function renderRoomTab(){
   return h;
 }
 
-// ========== TAB: 근무 분석 ==========
 function calcStats(t){
   let own=0,duty=0;const daily={"월":0,"화":0,"수":0,"목":0,"금":0};let maxC=0;
   DAYS.forEach(d=>{let dc=0;PERIODS.forEach(p=>{const k=d+p;const v=t.s[k];if(!v||v==="X"){if(dc>maxC)maxC=dc;dc=0;return}const s=v.split("|")[0].split(" ")[0];if(s.includes("공강")||s.includes("진로"))duty++;else{own++;daily[d]++}dc++});if(dc>maxC)maxC=dc});
@@ -1977,31 +1975,6 @@ function calcStats(t){
 }
 
 
-// ========== TAB: 히트맵 ==========
-function renderHeatmapTab(){
-  const grid={};
-  DAYS.forEach(d=>{PERIODS.forEach(p=>{grid[d+p]={busy:0,total:T.length}})});
-  T.forEach(t=>{DAYS.forEach(d=>{PERIODS.forEach(p=>{if(gs(t,d,p)==="busy")grid[d+p].busy++})})});
-  const max=Math.max(...Object.values(grid).map(v=>v.busy));
-  const min=Math.min(...Object.values(grid).map(v=>v.busy));
-  function hc(b){if(b===0)return"#f5f5f7";const pct=(b-min)/(max-min||1);if(pct<0.25)return"#e3f2fd";if(pct<0.5)return"#90caf9";if(pct<0.7)return"#ffb74d";if(pct<0.85)return"#ff7043";return"#c62828"}
-  function ht(b){const pct=(b-min)/(max-min||1);return pct>0.6?"#fff":"#1d1d1f"}
-  let h='<div class="card"><div class="help-text">💡 요일·교시별 수업 밀도. 진할수록 수업 많음. 셀 <b>클릭 → 공강 탭으로 이동</b></div>';
-  h+='<div class="heat-legend"><span>적음</span>';["#f5f5f7","#e3f2fd","#90caf9","#ffb74d","#ff7043","#c62828"].forEach(c=>{h+=`<span class="legend-box" style="background:${c}"></span>`});h+=`<span>많음</span><span style="margin-left:auto"><b>최대</b> ${max}명</span></div>`;
-  h+='<div class="heatmap">';
-  h+='<div class="heat-cell hdr">⏰</div>';DAYS.forEach(d=>{h+=`<div class="heat-cell hdr">${d}</div>`});
-  PERIODS.forEach(p=>{
-    h+=`<div class="heat-cell rowhdr">${p}</div>`;
-    DAYS.forEach(d=>{const info=grid[d+p];const bg=hc(info.busy);const col=ht(info.busy);const pct=Math.round(info.busy/info.total*100);h+=`<div class="heat-cell" style="background:${bg};color:${col}" onclick="setTab('find');DP='${d+p}';render()"><div>${info.busy}</div><div class="heat-pct">${pct}%</div></div>`});
-  });
-  h+='</div></div>';
-  const pt={};PERIODS.forEach(p=>{pt[p]=DAYS.reduce((s,d)=>s+grid[d+p].busy,0)});
-  const peakP=Object.entries(pt).sort((a,b)=>b[1]-a[1])[0];
-  const dt={};DAYS.forEach(d=>{dt[d]=PERIODS.reduce((s,p)=>s+grid[d+p].busy,0)});
-  const peakD=Object.entries(dt).sort((a,b)=>b[1]-a[1])[0];
-  h+=`<div class="card"><div class="card-title">📊 분석 요약</div><div style="font-size:12px;line-height:1.8;color:#424245">• 가장 바쁜 교시: <b>${peakP[0]}교시</b> (${peakP[1]}개 수업)<br>• 가장 바쁜 요일: <b>${peakD[0]}요일</b> (${peakD[1]}개 수업)</div></div>`;
-  return h;
-}
 
 // ========== TAB: 행사 ==========
 function renderEventTab(){
@@ -3108,7 +3081,6 @@ function render(){
   else if(TAB==="common")h+=renderCommonTab();
   else if(TAB==="myclass")h+=renderMyClassTab();
   else if(TAB==="room")h+=renderRoomTab();
-  else if(TAB==="heatmap")h+=renderHeatmapTab();
   else if(TAB==="event")h+=renderEventTab();
   else if(TAB==="view")h+=renderViewTab();
   else if(TAB==="records")h+=renderRecordsTab();
