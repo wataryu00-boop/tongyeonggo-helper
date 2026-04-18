@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
+<title>통영고 교무 도우미</title>
+<meta name="theme-color" content="#1a237e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="교무도우미">
+<link rel="manifest" href='data:application/json;charset=utf-8,{"name":"통영고 교무 도우미","short_name":"교무도우미","start_url":".","display":"standalone","background_color":"%23f5f5f7","theme_color":"%231a237e","icons":[{"src":"data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22192%22 height=%22192%22 viewBox=%220 0 192 192%22%3E%3Crect width=%22192%22 height=%22192%22 fill=%22%231a237e%22 rx=%2232%22/%3E%3Ctext x=%2296%22 y=%22120%22 font-size=%22100%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22sans-serif%22 font-weight=%22bold%22%3E통%3C/text%3E%3C/svg%3E","sizes":"192x192","type":"image/svg+xml"},{"src":"data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22512%22 height=%22512%22 viewBox=%220 0 512 512%22%3E%3Crect width=%22512%22 height=%22512%22 fill=%22%231a237e%22 rx=%2286%22/%3E%3Ctext x=%22256%22 y=%22320%22 font-size=%22260%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22sans-serif%22 font-weight=%22bold%22%3E통%3C/text%3E%3C/svg%3E","sizes":"512x512","type":"image/svg+xml"}]}'>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;overscroll-behavior:none}
+body{font-family:-apple-system,BlinkMacSystemFont,'Pretendard','Apple SD Gothic Neo','Malgun Gothic',sans-serif;background:#f5f5f7;color:#1d1d1f;font-size:14px;line-height:1.4}
+
+/* App Shell */
+.app{display:flex;flex-direction:column;height:100vh;height:100dvh;max-width:560px;margin:0 auto;background:#f5f5f7;position:relative}
+
+/* Top Bar */
+.topbar{background:#fff;padding:env(safe-area-inset-top,12px) 16px 10px;border-bottom:1px solid #e5e5ea;position:sticky;top:0;z-index:100;flex-shrink:0}
+.topbar-content{display:flex;align-items:center;justify-content:space-between;min-height:36px}
+.topbar-title{font-size:17px;font-weight:700;color:#1a237e;letter-spacing:-.3px}
+.topbar-sub{font-size:11px;color:#86868b;margin-top:1px}
+.topbar-btn{width:36px;height:36px;border:none;background:transparent;cursor:pointer;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;transition:background .15s}
+.topbar-btn:active{background:#e5e5ea}
+
+/* Tab Header (scrollable, replaces vertical header sections) */
+.tab-header{background:#fff;border-bottom:1px solid #e5e5ea;padding:8px 12px 10px;flex-shrink:0}
+.tab-header h2{font-size:20px;font-weight:700;color:#1d1d1f;letter-spacing:-.4px}
+.tab-header-sub{font-size:12px;color:#86868b;margin-top:2px}
+
+/* Content Area */
+.content{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 90px;scroll-behavior:smooth}
+
+/* Bottom Tab Bar */
+.bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:560px;background:rgba(255,255,255,.92);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid rgba(0,0,0,.08);padding:6px 0 calc(6px + env(safe-area-inset-bottom,0));z-index:50;display:flex;justify-content:space-around}
+.nav-item{flex:1;background:none;border:none;padding:6px 4px;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:3px;color:#86868b;font-size:9px;font-weight:500;min-height:48px;justify-content:center;transition:color .15s}
+.nav-item .icon{font-size:20px;line-height:1}
+.nav-item.active{color:#1a237e;font-weight:700}
+.nav-item:active{opacity:.6}
+.nav-item .label{letter-spacing:-.2px}
+
+/* More menu overlay */
+.more-menu{position:fixed;bottom:calc(60px + env(safe-area-inset-bottom,0));right:10px;background:#fff;border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.15),0 2px 8px rgba(0,0,0,.08);z-index:60;overflow:hidden;width:200px;animation:popUp .2s;display:none}
+.more-menu.open{display:block}
+.more-menu button{width:100%;padding:14px 16px;border:none;background:none;cursor:pointer;text-align:left;font-family:inherit;font-size:14px;display:flex;align-items:center;gap:10px;color:#1d1d1f;border-bottom:1px solid #f0f0f0}
+.more-menu button:last-child{border-bottom:none}
+.more-menu button:active{background:#f0f0f0}
+.more-menu button.active{color:#1a237e;font-weight:600;background:#f0f4ff}
+.more-menu .icon{font-size:18px}
+@keyframes popUp{from{opacity:0;transform:translateY(10px) scale(.95)}to{opacity:1;transform:translateY(0) scale(1)}}
+
+/* Cards */
+.card{background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.card-title{font-size:13px;font-weight:700;color:#1d1d1f;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.card-sub{font-size:11px;color:#86868b;margin-bottom:8px}
+
+/* Inputs */
+.search-input{width:100%;padding:12px 14px;border-radius:12px;border:1px solid #e5e5ea;font-size:15px;font-family:inherit;background:#f5f5f7;color:#1d1d1f}
+.search-input:focus{outline:none;border-color:#1a237e;background:#fff}
+
+/* Teacher pills (horizontal scroll) */
+.pill-scroll{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:4px 0;margin:0 -12px;padding-left:12px;padding-right:12px;scrollbar-width:none}
+.pill-scroll::-webkit-scrollbar{display:none}
+.pill-wrap{display:flex;flex-wrap:wrap;gap:6px;padding:4px 0}
+.pill{padding:8px 14px;border-radius:18px;border:1px solid #e5e5ea;background:#fff;cursor:pointer;font-size:13px;font-family:inherit;color:#1d1d1f;white-space:nowrap;font-weight:500;transition:all .15s;min-height:34px;display:inline-flex;align-items:center;gap:4px}
+.pill:active{transform:scale(.95)}
+.pill.active{background:#1a237e;color:#fff;border-color:#1a237e;font-weight:700}
+.pill.multi-active{background:#2e7d32;color:#fff;border-color:#2e7d32;font-weight:700}
+.pill .tag{font-size:10px;color:#86868b;margin-left:2px}
+.pill.active .tag{color:rgba(255,255,255,.8)}
+
+/* Dept filter (single row with horizontal scroll) */
+.dept-row{display:flex;gap:5px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:4px 0 6px;margin:0 -12px 8px;padding-left:12px;padding-right:12px;scrollbar-width:none}
+.dept-row::-webkit-scrollbar{display:none}
+.dept-chip{padding:6px 12px;border-radius:14px;border:1px solid #e5e5ea;background:#fff;cursor:pointer;font-size:12px;font-family:inherit;color:#1d1d1f;white-space:nowrap;font-weight:500;flex-shrink:0;min-height:30px;display:inline-flex;align-items:center;gap:3px}
+.dept-chip.active{background:#1a237e;color:#fff;border-color:#1a237e;font-weight:700}
+.dept-chip .cnt{font-size:10px;opacity:.7}
+
+/* Schedule table (optimized for touch) */
+.tt-wrap{margin:0 -2px;border-radius:10px;overflow:hidden}
+table.tt{border-collapse:separate;border-spacing:2px;width:100%;table-layout:fixed;font-size:11px;background:transparent}
+.tt th{background:#1a237e;color:#fff;padding:6px 2px;font-weight:700;font-size:11px;border-radius:6px}
+.tt th:first-child{width:28px;font-size:10px}
+.tt td{padding:4px 2px;text-align:center;vertical-align:middle;border-radius:6px;background:#fff;transition:all .15s;min-height:44px;height:44px;position:relative}
+.tt td.busy{cursor:pointer}
+.tt td.busy:active{transform:scale(.96)}
+.tt td.sel{background:#1a237e!important;color:#fff!important;box-shadow:0 2px 8px rgba(26,35,126,.4)}
+.tt td.sel .sn,.tt td.sel .rm{color:#fff!important}
+.tt td.mark{background:#f5f5f7}
+.tt td.empty{background:#fafafa}
+.tt .sn{font-size:10px;font-weight:700;line-height:1.15;word-break:keep-all;overflow:hidden;text-overflow:ellipsis}
+.tt .rm{font-size:8px;color:#86868b;margin-top:1px;font-weight:500}
+.tt td.hl-free{box-shadow:inset 0 0 0 2px #2e7d32}
+
+/* Buttons */
+.btn{padding:12px 18px;border:none;border-radius:12px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;transition:all .15s;background:#1a237e;color:#fff}
+.btn:active{transform:scale(.97);opacity:.9}
+.btn-sec{background:#f0f0f5;color:#1d1d1f}
+.btn-sm{padding:8px 12px;font-size:12px;min-height:34px}
+.btn-full{width:100%}
+.btn-outline{background:transparent;border:1.5px solid #e5e5ea;color:#1d1d1f}
+
+/* Result sections */
+.result-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px}
+.badge{display:inline-flex;align-items:center;background:#1a237e;color:#fff;font-size:11px;font-weight:700;padding:3px 9px;border-radius:11px;min-width:22px;justify-content:center}
+.badge.green{background:#2e7d32}
+.badge.orange{background:#e65100}
+.badge.red{background:#c62828}
+
+.chip-list{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:7px 12px;border-radius:10px;background:#f0f4ff;border:1px solid #d0d9f0;font-size:12px;font-weight:500;color:#1a237e;cursor:pointer;transition:all .15s;min-height:34px;display:inline-flex;align-items:center}
+.chip:active{transform:scale(.95)}
+.chip.green-chip{background:#e8f5e9;border-color:#c8e6c9;color:#1b5e20}
+.chip .dept-tag{background:rgba(0,0,0,.08);padding:1px 5px;border-radius:4px;font-size:10px;margin-left:4px;color:inherit;opacity:.8}
+
+.swap-card{padding:12px 14px;border-radius:12px;background:#fff;border:1px solid #e5e5ea;margin-bottom:6px;cursor:pointer;transition:all .15s}
+.swap-card:active{transform:scale(.98);background:#f5f5f7}
+.swap-card-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.swap-name{font-weight:700;font-size:14px;color:#1d1d1f}
+.swap-badge{background:#1a237e;color:#fff;font-size:11px;font-weight:600;padding:3px 8px;border-radius:8px}
+.swap-detail{color:#424245;font-size:12px;line-height:1.4}
+.swap-detail b{color:#1a237e}
+
+.empty-state{text-align:center;padding:28px 16px;color:#86868b;font-size:13px}
+.empty-state .emoji{font-size:40px;display:block;margin-bottom:8px;opacity:.5}
+
+/* Selected info banner */
+.selected-banner{background:linear-gradient(135deg,#1a237e 0%,#3949ab 100%);color:#fff;padding:14px 16px;border-radius:14px;margin-bottom:12px;box-shadow:0 4px 14px rgba(26,35,126,.25)}
+.selected-banner .subj{font-size:16px;font-weight:700}
+.selected-banner .meta{font-size:12px;opacity:.9;margin-top:4px}
+
+/* Sheet / bottom sheet modal */
+.sheet-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:200;display:none;animation:fadeIn .2s}
+.sheet-overlay.open{display:block}
+.sheet{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:560px;background:#fff;border-radius:20px 20px 0 0;z-index:201;max-height:85vh;overflow:hidden;display:none;flex-direction:column;animation:slideSheetUp .3s}
+.sheet.open{display:flex}
+.sheet-handle{width:40px;height:5px;background:#d1d1d6;border-radius:3px;margin:10px auto 4px;flex-shrink:0}
+.sheet-head{padding:8px 16px 12px;border-bottom:1px solid #e5e5ea;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.sheet-title{font-size:17px;font-weight:700;color:#1d1d1f}
+.sheet-close{background:#f0f0f5;border:none;width:30px;height:30px;border-radius:15px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;color:#86868b}
+.sheet-body{flex:1;overflow-y:auto;padding:14px 16px;-webkit-overflow-scrolling:touch}
+@keyframes slideSheetUp{from{transform:translate(-50%,100%)}to{transform:translate(-50%,0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+/* Day/period grid for find tab */
+.dp-grid{display:grid;grid-template-columns:34px repeat(5,1fr);gap:4px;margin-bottom:12px}
+.dp-cell{padding:10px 4px;border-radius:8px;background:#fff;border:1px solid #e5e5ea;text-align:center;font-size:12px;font-weight:600;cursor:pointer;min-height:40px;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.dp-cell.hdr{background:#1a237e;color:#fff;border-color:#1a237e;cursor:default;font-weight:700;font-size:11px}
+.dp-cell.rowhdr{background:#f5f5f7;color:#424245;border-color:#e5e5ea;cursor:default;font-size:10px;padding:10px 0}
+.dp-cell.active{background:#1a237e;color:#fff;border-color:#1a237e;font-weight:700}
+.dp-cell:active:not(.hdr):not(.rowhdr){transform:scale(.95)}
+.dp-cell.hl{background:#e8f5e9;border-color:#4caf50;color:#1b5e20}
+
+/* Announcement box */
+.announce-box{background:#fff;border:1.5px dashed #1a237e;border-radius:12px;padding:14px;margin-top:10px;white-space:pre-line;font-size:13px;line-height:1.7;font-family:ui-monospace,'SF Mono',Monaco,monospace;color:#1d1d1f;user-select:text}
+
+/* Tag (department) */
+.dept-tag{display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:500;background:#f0f4ff;color:#1a237e;margin-left:4px}
+
+/* Mode segmented control */
+.segment{display:flex;background:#f0f0f5;border-radius:10px;padding:3px;margin-bottom:10px;gap:2px}
+.segment button{flex:1;background:none;border:none;padding:8px 6px;cursor:pointer;font-family:inherit;font-size:12px;border-radius:8px;color:#86868b;font-weight:600;min-height:34px;transition:all .15s}
+.segment button.active{background:#fff;color:#1a237e;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+
+/* Stat cards */
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:10px}
+.stat-card{background:#fff;border-radius:12px;padding:12px 10px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.stat-num{font-size:22px;font-weight:800;color:#1a237e;line-height:1.1}
+.stat-lbl{font-size:10px;color:#86868b;margin-top:2px;font-weight:500}
+
+/* Teacher bar row */
+.tbar-row{padding:10px 12px;border-bottom:1px solid #f0f0f0;display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:center;font-size:12px;cursor:pointer}
+.tbar-row:active{background:#f5f5f7}
+.tbar-row:last-child{border-bottom:none}
+.tbar-name{font-weight:700;min-width:60px}
+.tbar-bar{height:22px;background:#f0f0f5;border-radius:11px;overflow:hidden;position:relative}
+.tbar-fill{height:100%;background:linear-gradient(90deg,#1a237e,#3949ab);border-radius:11px;transition:width .3s}
+.tbar-label{position:absolute;top:0;left:8px;font-size:10px;font-weight:600;color:#fff;line-height:22px}
+.tbar-dept{font-size:10px;color:#86868b}
+
+/* Heatmap */
+.heat-wrap{margin-bottom:12px}
+.heatmap{display:grid;grid-template-columns:30px repeat(5,1fr);gap:3px}
+.heat-cell{padding:8px 2px;text-align:center;border-radius:6px;font-size:12px;font-weight:700;min-height:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:all .1s}
+.heat-cell:active{transform:scale(.95)}
+.heat-cell.hdr{background:#1a237e;color:#fff;cursor:default;font-size:11px}
+.heat-cell.rowhdr{background:#f5f5f7;color:#424245;cursor:default;font-size:10px}
+.heat-pct{font-size:8px;font-weight:500;opacity:.8;margin-top:1px}
+.heat-legend{display:flex;align-items:center;gap:4px;font-size:10px;color:#86868b;margin-bottom:10px;flex-wrap:wrap}
+.legend-box{width:18px;height:14px;border-radius:3px}
+
+/* Event selection */
+.event-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin-bottom:8px}
+.event-btn{padding:10px 4px;border-radius:10px;border:1.5px solid #e5e5ea;background:#fff;cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;color:#1d1d1f;min-height:40px;transition:all .15s}
+.event-btn:active{transform:scale(.95)}
+.event-btn.active{background:#e65100;color:#fff;border-color:#e65100;font-weight:700}
+.period-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:8px}
+
+/* Quick actions */
+.qa-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.qa-btn{padding:7px 12px;border-radius:16px;border:1px solid #e5e5ea;background:#fff;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;color:#1d1d1f;min-height:32px}
+.qa-btn:active{background:#f0f0f5}
+
+/* Counsel box */
+.counsel-box{background:#fff8e1;border:1px solid #ffe082;border-radius:12px;padding:12px;margin-top:10px}
+.counsel-box h4{font-size:13px;font-weight:700;color:#e65100;margin-bottom:8px}
+
+.class-badge{background:linear-gradient(135deg,#1a237e 0%,#3949ab 100%);color:#fff;padding:16px;border-radius:14px;margin-bottom:12px;box-shadow:0 4px 14px rgba(26,35,126,.25)}
+.class-badge h3{font-size:17px;font-weight:700}
+.class-badge .sub{font-size:12px;opacity:.9;margin-top:4px}
+
+.impact-row{display:grid;grid-template-columns:1fr auto;gap:8px;padding:10px 12px;background:#fff;border-radius:10px;margin-bottom:4px;font-size:12px;align-items:center;border:1px solid #f0f0f0}
+.impact-name{font-weight:700}
+.impact-dept{font-size:10px;color:#86868b;margin-left:4px}
+.impact-lost{color:#c62828;font-weight:700;font-size:14px}
+.impact-details{font-size:10px;color:#86868b;margin-top:3px;line-height:1.4}
+
+.help-text{background:#fff8e1;border-left:3px solid #fbc02d;padding:8px 12px;border-radius:0 8px 8px 0;font-size:11px;color:#6d4c00;margin-bottom:10px;line-height:1.5}
+.help-text b{color:#5d4037}
+
+.notice-text{background:#e3f2fd;border-left:3px solid #1565c0;padding:8px 12px;border-radius:0 8px 8px 0;font-size:11px;color:#0d47a1;margin-bottom:10px}
+
+/* Install prompt */
+.install-prompt{position:fixed;bottom:calc(80px + env(safe-area-inset-bottom,0));left:10px;right:10px;max-width:540px;margin:0 auto;background:#1a237e;color:#fff;padding:12px 14px;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.2);display:none;align-items:center;gap:10px;z-index:150;animation:slideSheetUp .3s}
+.install-prompt.show{display:flex}
+.install-prompt button{border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:600}
+.install-prompt .primary{background:#fff;color:#1a237e}
+.install-prompt .close{background:transparent;color:#fff;opacity:.7;padding:4px 8px}
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<div class="sheet-overlay" id="sheetOverlay" onclick="closeSheet()"></div>
+<div class="sheet" id="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head"><div class="sheet-title" id="sheetTitle">상세</div><button class="sheet-close" onclick="closeSheet()">✕</button></div>
+  <div class="sheet-body" id="sheetBody"></div>
+</div>
+<div class="more-menu" id="moreMenu"></div>
+
+<script>
+const DAYS=["월","화","수","목","금"],PERIODS=[1,2,3,4,5,6,7];
+const T=[{"n":"강민서","h":18,"s":{"금1":"매체의사|211","금2":"매체의사 C 2C-3|210","금4":"매체의사 A 2A-2|210","금6":"매체의사|206","금7":"매체의사 B 2B-3|210","목3":"매체의사 D 2D-3|207","목5":"매체의사 B 2B-2|210","목6":"매체의사|211","목7":"매체의사 A 2A-3|210","수2":"매체의사 D 2D-2|207","수4":"매체의사 C 2C-2|210","수5":"X","수6":"X","수7":"X","월1":"매체의사|206","월2":"매체의사 A 2A|210","월4":"매체의사 C 2C|210","월7":"X","화1":"매체의사|206","화2":"매체의사 B 2B|210","화5":"매체의사|211","화6":"매체의사 D 2D|207"},"d":"기술가정"},{"n":"강성두","h":12,"s":{"금1":"X","금2":"한문Ⅰ 3SL39-2|303","금4":"한문Ⅰ|306","금7":"한문Ⅰ 3SL45-2|304","목4":"한문Ⅰ|310","목5":"한문Ⅰ|302","목7":"한문Ⅰ 3SL17-2|307","수5":"X","수6":"X","수7":"X","월2":"한문Ⅰ 3SL17|307","월5":"한문Ⅰ|310","월7":"X","화1":"한문Ⅰ|302","화2":"한문Ⅰ 3SL39|303","화5":"한문Ⅰ|306","화6":"한문Ⅰ 3SL45|304"},"d":"제2외국어/한문"},{"n":"강수미","h":18,"s":{"금3":"사문탐 D 3D|304","금4":"경제 A 2A-2|211","금5":"사문탐 A 3A|304","금7":"경제 B 2B-3|211","목2":"사문탐 B 3B|304","목3":"경제 D 2D-3|211","목5":"경제 B 2B-2|211","목7":"경제 A 2A-3|211","수1":"사문탐 A 3A|304","수2":"경제 D 2D-2|211","수3":"사문탐 D 3D|304","수5":"X","수6":"X","수7":"X","월1":"사문탐 A 3A|304","월2":"경제 A 2A|211","월3":"사문탐 B 3B|304","월7":"X","화2":"경제 B 2B|211","화4":"사문탐 D 3D|304","화6":"경제 D 2D|211","화7":"사문탐 B 3B|304"},"d":"사회"},{"n":"강혜정","h":18,"s":{"금1":"X","금2":"인공수학 C 2C-3|202","금5":"기하 A 3A|302","금7":"인공수학 B 2B-3|202","목2":"기하 B 3B|302","목3":"인공수학 D 2D-3|202","목5":"인공수학 B 2B-2|202","목6":"기하 C 3C|302","수1":"기하 A 3A|302","수2":"인공수학 D 2D-2|202","수4":"인공수학 C 2C-2|202","수5":"X","수6":"X","수7":"X","월1":"기하 A 3A|302","월3":"기하 B 3B|302","월4":"인공수학 C 2C|202","월6":"기하 C 3C|302","월7":"X","화2":"인공수학 B 2B|202","화3":"기하 C 3C|302","화6":"인공수학 D 2D|202","화7":"기하 B 3B|302"},"d":"수학"},{"n":"고동훈","h":18,"s":{"금2":"수학1|109","금3":"수학1|110","금5":"수학1|107","금7":"수학1|106","목1":"수학1|109","목3":"수학1|106","목4":"수학1|108","목6":"수학1|107","수1":"수학1|105","수3":"수학1|107","수4":"수학1|110","수5":"X","수6":"X","수7":"X","월3":"수학1|105","월5":"수학1|109","월6":"수학1|108","월7":"X","화1":"수학1|110","화2":"수학1|105","화5":"수학1|108","화6":"수학1|106"},"d":"수학"},{"n":"구정현","h":16,"s":{"금1":"화학|209","금2":"과탐실1|106","금4":"화학 A 2A-2|207","금6":"과탐실1|103","목2":"화학|209","목3":"과탐실1|101","목5":"화학 B 2B-2|209","수2":"화학 D 2D-2|209","수4":"화학 C 2C-2|209","수5":"X","수6":"X","수7":"X","월1":"과탐실1|102","월2":"화학 A 2A|207","월4":"화학 C 2C|209","월7":"X","화1":"과탐실1|104","화2":"화학 B 2B|209","화5":"과탐실1|105","화6":"화학 D 2D|209"},"d":"과학"},{"n":"권주겸","h":3,"s":{"금4":"독서 3L2347-2|303","금6":"독서|310","목1":"X","목2":"X","목3":"X","목4":"X","목5":"X","목6":"X","목7":"X","수5":"X","수6":"X","수7":"X","월5":"독서|305","월7":"X"},"d":"국어"},{"n":"김남도","h":17,"s":{"금1":"X","금2":"영어Ⅱ|307","금4":"영어Ⅱ|310","금7":"영어Ⅱ|302","목2":"진로영어 B 3B|303","목3":"영어Ⅱ|305","목5":"영어Ⅱ|301","목7":"영어Ⅱ|308","수2":"영어Ⅱ|306","수3":"진로영어 D 3D|302","수5":"X","수6":"X","수7":"X","월2":"영어Ⅱ|304","월3":"진로영어 B 3B|303","월5":"영어Ⅱ|309","월6":"진로영어 C 3C|301","월7":"X","화3":"진로영어 C 3C|301","화4":"진로영어 D 3D|302","화6":"영어Ⅱ|303","화7":"진로영어 B 3B|303"},"d":"영어"},{"n":"김달수","h":17,"s":{"금1":"X","금2":"물리학 C 2C-3|208","금4":"물리학 A 2A-2|208","금6":"물리학|207","금7":"물리학 B 2B-3|208","목1":"물리학|207","목3":"물리학 D 2D-3|208","목5":"물리학 B 2B-2|208","목7":"물리학 A 2A-3|208","수2":"물리학 D 2D-2|208","수4":"물리학 C 2C-2|208","수5":"X","수6":"X","수7":"X","월2":"물리학 A 2A|208","월4":"물리학 C 2C|208","월7":"X","화1":"물리학|207","화2":"물리학 B 2B|208","화4":"과학1|102","화6":"물리학 D 2D|208","화7":"과학1|101"},"d":"과학"},{"n":"김도형","h":17,"s":{"금1":"2진로|202","금3":"2진로 2SL12-3|202","금5":"2진로 2SL56-3|206","금7":"2진로|203","목1":"2진로 2SL34-3|204","목2":"2진로|207","목4":"2진로 2SL56-2|206","목6":"2진로|205","수1":"2진로 2SL12-2|202","수3":"2진로 2SL34-2|204","수5":"X","수6":"X","수7":"X","월1":"2진로 2SL12|202","월3":"2진로|204","월5":"2진로 2SL34|204","월6":"2진로|207","월7":"X","화3":"2진로|207","화4":"2진로 2SL56|206","화7":"2진로|201"},"d":"진로"},{"n":"김동희","h":17,"s":{"금1":"영어Ⅰ|206","금3":"영어Ⅰ|204","금5":"영어Ⅰ|202","금6":"영어Ⅰ|210","목1":"영어Ⅰ|210","목4":"영어Ⅰ|203","목6":"영어Ⅰ|207","수1":"영어Ⅰ|205","수3":"영어Ⅰ|206","수4":"영어Ⅰ|211","수5":"X","수6":"X","수7":"X","월2":"영어Ⅰ|209","월3":"영어Ⅰ|211","월5":"영어Ⅰ|206","월6":"영어Ⅰ|208","월7":"X","화1":"영어Ⅰ|209","화3":"영어Ⅰ|201","화4":"영어Ⅰ|208","화6":"X","화7":"X"},"d":"영어"},{"n":"김미경","h":17,"s":{"금1":"영어Ⅰ|208","금3":"영어Ⅰ|209","금5":"영어Ⅰ|207","금6":"영어Ⅰ|201","목1":"영어Ⅰ|205","목2":"영어Ⅰ|211","목4":"영어Ⅰ|204","목6":"영어Ⅰ|202","수1":"영어Ⅰ|203","수4":"영어Ⅰ|204","수5":"X","수6":"X","수7":"X","월3":"영어Ⅰ|201","월4":"영어Ⅰ|207","월6":"영어Ⅰ|210","월7":"X","화3":"영어Ⅰ|203","화4":"영어Ⅰ|202","화6":"영어Ⅰ|205","화7":"영어Ⅰ|206"},"d":"영어"},{"n":"김병진","h":17,"s":{"금1":"스포츠1|203","금2":"스포츠1|204","금3":"스포츠1|205","금5":"스포츠1|209","목1":"스포츠1|206","목2":"스포츠1|202","목4":"스포츠1|201","목6":"스포츠1|203","수1":"스포츠1|211","수3":"스포츠1|201","수5":"X","수6":"X","수7":"X","월3":"스포츠1|207","월5":"스포츠1|202","월6":"스포츠1|206","월7":"X","화1":"스포츠1|205","화3":"스포츠1|208","화5":"스포츠1|204","화7":"스포츠1|210"},"d":"체육"},{"n":"김석진","h":18,"s":{"금1":"한국사1|106","금3":"한국사1|109","금4":"한국사1|110","금7":"한국사1|111","목1":"한국사1|110","목3":"한국사1|111","목5":"한국사1|109","목6":"한국사1|108","수1":"한국사1|111","수2":"한국사1|107","수5":"X","수6":"X","수7":"X","월2":"한국사1|110","월3":"한국사1|108","월5":"한국사1|106","월6":"한국사1|107","월7":"X","화2":"한국사1|109","화3":"한국사1|106","화5":"한국사1|107","화7":"한국사1|108"},"d":"사회"},{"n":"김선미","h":18,"s":{"금1":"경제수학 3M3412-4|304","금2":"경제수학|302","금4":"보건 3L2347-2|302","금6":"경제수학|307","금7":"보건|301","목1":"보건 3L2347|302","목4":"경제수학 3M3412-3|304","목5":"경제수학|307","목7":"경제수학|302","수2":"경제수학 3M3412-2|304","수4":"경제수학|307","수5":"X","수6":"X","수7":"X","월2":"보건|309","월4":"경제수학|302","월5":"경제수학 3M3412|304","월7":"X","화1":"보건|309","화2":"경제수학|307","화5":"경제수학|302","화6":"보건|301"},"d":"수학"},{"n":"김세미","h":15,"s":{"금3":"3세계사 D 3D|307","목2":"3세계사 B 3B|307","목3":"3공강|303","목4":"3공강|301","목6":"3세계사 C 3C|307","목7":"3공강|306","수2":"3진로|305","수3":"3세계사 D 3D|307","수5":"X","수6":"X","수7":"X","월3":"3세계사 B 3B|307","월4":"3공강|306","월6":"3세계사 C 3C|307","월7":"X","화1":"3진로|304","화3":"3세계사 C 3C|307","화4":"3세계사 D 3D|307","화7":"3세계사 B 3B|307"},"d":"사회"},{"n":"김소정","h":17,"s":{"금1":"X","금3":"영어Ⅰ|206","금4":"2공강 A 2A-2|204","금6":"영어Ⅰ|203","목1":"X","목2":"영어Ⅰ|206","목4":"영어Ⅰ|209","목6":"영어Ⅰ|201","목7":"2공강 A 2A-3|204","수2":"영어Ⅰ|205","수3":"영어Ⅰ|208","수4":"영어Ⅰ|207","수5":"X","수6":"X","수7":"X","월1":"X","월2":"2공강 A 2A|204","월4":"영어Ⅰ|204","월5":"영어Ⅰ|205","월7":"X","화1":"영어Ⅰ|210","화4":"영어Ⅰ|211","화5":"영어Ⅰ|202","화7":"영어Ⅰ|204"},"d":"영어"},{"n":"김연경","h":17,"s":{"금1":"문학|204","금3":"문학|211","금5":"문학|201","금6":"문학|202","목2":"문학|204","목4":"문학|202","목6":"문학|206","목7":"문학|209","수1":"문학|206","수3":"문학|207","수5":"X","수6":"X","수7":"X","월1":"문학|203","월3":"문학|205","월5":"문학|210","월7":"X","화1":"문학|201","화3":"문학|205","화5":"문학|208","화7":"문학|203"},"d":"국어"},{"n":"김예진","h":18,"s":{"금3":"생윤(가) D 3D|308","금4":"현윤(가) A 2A-2|205","금5":"생윤(가) A 3A|308","금7":"현윤(가) B 2B-3|205","목2":"생윤(가) B 3B|308","목5":"현윤(가) B 2B-2|205","목6":"생윤(가) C 3C|308","목7":"현윤(가) A 2A-3|205","수1":"생윤(가) A 3A|308","수3":"생윤(가) D 3D|308","수5":"X","수6":"X","수7":"X","월1":"생윤(가) A 3A|308","월2":"현윤(가) A 2A|205","월3":"생윤(가) B 3B|308","월6":"생윤(가) C 3C|308","월7":"X","화2":"현윤(가) B 2B|205","화3":"생윤(가) C 3C|308","화4":"생윤(가) D 3D|308","화7":"생윤(가) B 3B|308"},"d":"도덕/윤리"},{"n":"김은미","h":17,"s":{"금1":"X","금3":"지구Ⅱ D 3D|312","금5":"과학1|106","금6":"과학1|105","목1":"과학1|107","목2":"과학1|108","목3":"과학1|109","목6":"생활과학 C 3C|304","수2":"과학1|101","수3":"지구Ⅱ D 3D|312","수5":"X","수6":"X","수7":"X","월1":"과학1|110","월2":"과학1|102","월3":"과학1|103","월6":"생활과학 C 3C|304","월7":"X","화3":"생활과학 C 3C|304","화4":"지구Ⅱ D 3D|312","화6":"과학1|111","화7":"과학1|104"},"d":"과학"},{"n":"김은정","h":17,"s":{"금1":"영어1|107","금2":"영어1|108","금4":"영어1|111","금6":"영어1|102","목1":"영어1|111","목4":"영어1|106","목6":"영어1|103","목7":"영어1|110","수3":"영어1|106","수4":"영어1|104","수5":"X","수6":"X","수7":"X","월1":"영어1|107","월5":"영어1|108","월6":"영어1|109","월7":"X","화3":"영어1|101","화4":"영어1|105","화6":"영어1|110","화7":"영어1|109"},"d":"영어"},{"n":"김재필","h":17,"s":{"금1":"스포츠|310","금3":"체육1|111","금6":"스포츠|305","금7":"스포츠|303","목1":"스포츠1|208","목3":"스포츠|301","목4":"스포츠|308","목7":"스포츠|309","수2":"스포츠|302","수4":"스포츠|306","수5":"X","수6":"X","수7":"X","월1":"스포츠1|209","월3":"스포츠1|210","월4":"스포츠|304","월6":"스포츠1|211","월7":"X","화2":"체육1|110","화4":"스포츠1|207","화6":"스포츠|307"},"d":"체육"},{"n":"김현주","h":17,"s":{"금1":"한국사1|104","금3":"한국사1|102","금4":"한국사1|103","금7":"한국사1|105","목2":"한국사1|101","목4":"한국사1|102","목5":"한국사1|104","목7":"한국사1|105","수3":"한국사1|101","수4":"한국사1|103","수5":"X","수6":"X","수7":"X","월3":"한국사1|101","월4":"한국사1|103","월6":"한국사1|104","월7":"X","화1":"한국사1|105","화3":"한국사1|102","화5":"1공강|101","화6":"1공강|102"},"d":"사회"},{"n":"김혜영(일본)","h":17,"s":{"금2":"일본어|211","금3":"2진로|207","금5":"2진로|208","금6":"2진로|209","목1":"2진로|209","목2":"일본어|210","목4":"일본어|210","목6":"2진로|208","수2":"일본어|210","수3":"2진로|209","수5":"X","수6":"X","수7":"X","월1":"일본어|211","월4":"일본어|211","월5":"2진로|208","월7":"X","화1":"일본어|211","화3":"일본어|210","화4":"2진로|209","화7":"2진로|208"},"d":"제2외국어/한문"},{"n":"김혜영(일사)","h":17,"s":{"금1":"사회1|102","금3":"사문 D 3D|305","금5":"사문 A 3A|305","목1":"사회1|103","목2":"사문 B 3B|305","목5":"사회1|107","목6":"사문 C 3C|305","수1":"사문 A 3A|305","수2":"사회1|104","수3":"사문 D 3D|305","수5":"X","수6":"X","수7":"X","월1":"사문 A 3A|305","월3":"사문 B 3B|305","월4":"사회1|101","월6":"사문 C 3C|305","월7":"X","화3":"사문 C 3C|305","화4":"사문 D 3D|305","화7":"사문 B 3B|305"},"d":"사회"},{"n":"박미선","h":17,"s":{"금2":"중국어Ⅱ 3SL39-2|309","금3":"중국어Ⅱ 2SL12-3|201","금5":"중국어Ⅱ 2SL56-3|205","금7":"중국어Ⅱ 3SL45-2|305","목1":"중국어Ⅱ 2SL34-3|203","목4":"중국어Ⅱ 2SL56-2|205","목5":"중국어Ⅱ|308","목7":"중국어Ⅱ 3SL17-2|301","수1":"중국어Ⅱ 2SL12-2|201","수3":"중국어Ⅱ 2SL34-2|203","수4":"중국어Ⅱ|308","수5":"X","수6":"X","수7":"X","월1":"중국어Ⅱ 2SL12|201","월2":"중국어Ⅱ 3SL17|301","월5":"중국어Ⅱ 2SL34|203","월7":"X","화2":"중국어Ⅱ 3SL39|309","화4":"중국어Ⅱ 2SL56|205","화6":"중국어Ⅱ 3SL45|305"},"d":"제2외국어/한문"},{"n":"박보경","h":5,"s":{"금1":"3공강|210","금4":"X","목4":"X","목5":"3공강|304","수1":"X","수2":"X","수3":"X","수4":"X","수5":"X","수6":"X","수7":"X","월2":"3공강|302","월4":"X","월7":"X","화3":"3공강|209","화4":"X","화5":"3공강|303"},"d":"기타(공강담당)"},{"n":"박솔지","h":18,"s":{"금2":"국어1|103","금4":"국어1|106","금5":"국어1|105","금7":"국어1|102","목2":"국어1|106","목4":"1공강|104","목6":"국어1|104","목7":"국어1|101","수1":"국어1|101","수3":"국어1|104","수4":"국어1|109","수5":"X","수6":"X","수7":"X","월1":"국어1|105","월3":"국어1|107","월4":"국어1|110","월7":"X","화1":"국어1|103","화2":"국어1|108","화5":"국어1|111","화7":"국어1|102"},"d":"국어"},{"n":"박수현","h":18,"s":{"금4":"현윤(나) A 2A-2|206","금5":"생윤(나) A 3A|309","금7":"현윤(나) B 2B-3|206","목2":"생윤(나) B 3B|309","목3":"현윤(나) D 2D-3|206","목5":"현윤(나) B 2B-2|206","목6":"생윤(나) C 3C|309","목7":"현윤(나) A 2A-3|206","수1":"생윤(나) A 3A|309","수2":"현윤(나) D 2D-2|206","수5":"X","수6":"X","수7":"X","월1":"생윤(나) A 3A|309","월2":"현윤(나) A 2A|206","월3":"생윤(나) B 3B|309","월6":"생윤(나) C 3C|309","월7":"X","화2":"현윤(나) B 2B|206","화3":"생윤(나) C 3C|309","화6":"현윤(나) D 2D|206","화7":"생윤(나) B 3B|309"},"d":"도덕/윤리"},{"n":"박정은","h":18,"s":{"금1":"미술|105","금4":"미술|102","금6":"미술|101","금7":"미술|104","목2":"미술|103","목3":"미술|102","목5":"미술|101","목7":"미술|106","수1":"미술|106","수2":"미술|103","수5":"X","수6":"X","수7":"X","월2":"미술|101","월3":"미술|102","월5":"미술|104","월6":"미술|105","월7":"X","화2":"미술|106","화3":"미술|105","화5":"미술|104","화6":"미술|103"},"d":"예술(미술)"},{"n":"박효덕","h":16,"s":{"금3":"대수|203","금5":"대수|210","금6":"대수|211","목1":"대수|211","목3":"대수|210","목5":"대수|203","목6":"대수|209","수1":"대수|209","수3":"대수|211","수5":"X","수6":"X","수7":"X","월1":"대수|210","월3":"대수|209","월6":"대수|203","월7":"X","화1":"대수|203","화3":"대수|211","화5":"대수|209","화6":"대수|210","화7":"X"},"d":"수학"},{"n":"변슬기","h":17,"s":{"금1":"영어Ⅱ|305","금2":"영어Ⅱ|306","금3":"영어Ⅱ D 3D|302","금6":"영어Ⅱ|304","금7":"영어Ⅱ|308","목1":"영어Ⅱ|306","목4":"영어Ⅱ|307","목5":"영어Ⅱ|309","목7":"X","수2":"영어Ⅱ|308","수4":"영어Ⅱ|303","수5":"X","수6":"X","수7":"X","월2":"영어Ⅱ|310","월4":"영어Ⅱ|310","월5":"영어Ⅱ|301","월7":"X","화1":"영어Ⅱ|310","화2":"영어Ⅱ|302","화5":"영어Ⅱ|307","화6":"영어Ⅱ|309"},"d":"영어"},{"n":"서강욱","h":17,"s":{"금1":"X","금2":"화학 C 2C-3|209","금3":"화학Ⅱ D 3D|303","금5":"화학Ⅱ A 3A|303","금7":"화학 B 2B-3|209","목2":"화학Ⅱ B 3B|312","목3":"화학 D 2D-3|209","목6":"화학Ⅱ C 3C|303","목7":"화학 A 2A-3|207","수1":"화학Ⅱ A 3A|303","수3":"화학Ⅱ D 3D|303","수5":"X","수6":"X","수7":"X","월1":"화학Ⅱ A 3A|303","월3":"화학Ⅱ B 3B|312","월5":"화학|209","월6":"화학Ⅱ C 3C|303","월7":"X","화3":"화학Ⅱ C 3C|303","화4":"화학Ⅱ D 3D|303","화7":"화학Ⅱ B 3B|312"},"d":"과학"},{"n":"성화룡","h":16,"s":{"금1":"X","금2":"시민지리 C 2C-3|205","금3":"세지|208","금5":"세지 A 3A|307","금7":"시민지리 B 2B-3|204","목3":"시민지리 D 2D-3|204","목5":"시민지리 B 2B-2|204","목6":"여행 C 3C|312","수1":"세지 A 3A|307","수2":"시민지리 D 2D-2|204","수4":"시민지리 C 2C-2|205","수5":"X","수6":"X","수7":"X","월1":"세지 A 3A|307","월4":"시민지리 C 2C|205","월6":"여행 C 3C|312","월7":"X","화2":"시민지리 B 2B|204","화3":"여행 C 3C|312","화6":"시민지리 D 2D|204"},"d":"사회"},{"n":"송우영","h":17,"s":{"금1":"국어1|110","금3":"1공강|108","금5":"국어1|108","금7":"국어1|107","목1":"국어1|108","목4":"국어1|103","목6":"국어1|109","목7":"국어1|111","수1":"국어1|110","수2":"국어1|105","수4":"국어1|111","수5":"X","수6":"X","수7":"X","월2":"국어1|109","월3":"국어1|104","월5":"국어1|102","월7":"X","화4":"국어1|106","화6":"국어1|101","화7":"국어1|107"},"d":"국어"},{"n":"송인식","h":18,"s":{"금1":"대수|201","금3":"인공수학|210","금4":"인공수학 A 2A-2|202","금6":"대수|208","목1":"대수|202","목2":"대수|201","목4":"대수|208","목7":"인공수학 A 2A-3|202","수1":"인공수학|210","수3":"대수|202","수5":"X","수6":"X","수7":"X","월1":"대수|208","월2":"인공수학 A 2A|202","월5":"대수|201","월6":"대수|202","월7":"X","화1":"대수|208","화4":"대수|201","화5":"인공수학|210","화7":"대수|202"},"d":"수학"},{"n":"안규리","h":1,"s":{"금1":"3공강|301","수5":"X","수6":"X","수7":"X","월7":"X"},"d":"기타(공강담당)"},{"n":"여인욱","h":16,"s":{"금1":"미적분 3M3412-4|303","금2":"경제수학|305","금6":"경제수학|301","금7":"미적분|306","목1":"경제수학|301","목3":"미적분|306","목4":"미적분 3M3412-3|303","목7":"경제수학|305","수2":"미적분 3M3412-2|303","수4":"경제수학|301","수5":"X","수6":"X","수7":"X","월2":"미적분|306","월4":"경제수학|305","월5":"미적분 3M3412|303","월7":"X","화1":"미적분|306","화2":"경제수학|305","화5":"경제수학|301"},"d":"수학"},{"n":"예성애","h":17,"s":{"금1":"환경|306","금2":"환경|308","금4":"환경 3L2347-2|304","금5":"1진로|109","목1":"환경 3L2347|304","목3":"1진로|105","목4":"환경|306","목7":"1진로|103","수1":"1진로|102","수3":"1진로|108","수5":"X","수6":"X","수7":"X","월2":"1진로|107","월5":"1진로|111","월6":"1진로|101","월7":"X","화2":"1진로|104","화3":"1진로|110","화5":"환경|308","화7":"1진로|106"},"d":"도덕/윤리"},{"n":"오남님","h":16,"s":{"금2":"2공강 C 2C-3|203","금4":"2공강 A 2A-2|203","금7":"2공강 B 2B-3|207","목2":"생명|203","목3":"2공강 D 2D-3|203","목5":"2공강 B 2B-2|207","목7":"2공강 A 2A-3|203","수2":"2공강 D 2D-2|203","수4":"2공강 C 2C-2|203","수5":"X","수6":"X","수7":"X","월2":"2공강 A 2A|203","월3":"생명|203","월4":"2공강 C 2C|203","월7":"X","화2":"2공강 B 2B|207","화4":"생명|203","화6":"2공강 D 2D|203","화7":"생명|207"},"d":"과학"},{"n":"유은주","h":16,"s":{"금1":"미적분 3M3412-4|312","금4":"미적분|309","금6":"미적분|308","금7":"경제수학|310","목1":"미적분|309","목3":"미적분|308","목4":"미적분 3M3412-3|312","목7":"경제수학|310","수2":"미적분 3M3412-2|312","수4":"경제수학|310","수5":"X","수6":"X","수7":"X","월2":"미적분|308","월4":"미적분|309","월5":"미적분 3M3412|312","월7":"X","화1":"미적분|308","화2":"경제수학|310","화5":"미적분|309"},"d":"수학"},{"n":"윤정화","h":18,"s":{"금2":"과학1|107","금3":"과학1|104","금5":"물리Ⅱ A 3A|310","금7":"과학1|103","목2":"물리Ⅱ B 3B|310","목5":"과학1|106","목6":"물리Ⅱ C 3C|310","수1":"물리Ⅱ A 3A|310","수2":"과학1|111","수4":"과학1|108","수5":"X","수6":"X","수7":"X","월1":"물리Ⅱ A 3A|310","월3":"물리Ⅱ B 3B|310","월4":"과학1|105","월6":"물리Ⅱ C 3C|310","월7":"X","화3":"물리Ⅱ C 3C|310","화4":"과학1|110","화6":"과학1|109","화7":"물리Ⅱ B 3B|310"},"d":"과학"},{"n":"이기회","h":17,"s":{"금1":"영어Ⅱ|302","금2":"영어Ⅱ|301","금4":"영어Ⅱ|305","금6":"영어Ⅱ|309","목1":"영어Ⅱ|310","목3":"영어Ⅱ|304","목4":"영어Ⅱ|302","목6":"영어Ⅱ C 3C|301","목7":"영어Ⅱ|303","수2":"영어Ⅱ|307","수4":"영어Ⅱ|302","수5":"X","수6":"X","수7":"X","월4":"영어Ⅱ|303","월5":"영어Ⅱ|308","월7":"X","화1":"영어Ⅱ|301","화2":"영어Ⅱ|304","화5":"영어Ⅱ|305","화6":"영어Ⅱ|306"},"d":"영어"},{"n":"이은경","h":16,"s":{"금1":"X","금2":"기술|102","금3":"기술|106","금5":"1공강|110","금6":"기술|104","목2":"기술|102","목3":"기술|104","목5":"기술|110","수2":"기술|108","수4":"기술|106","수5":"X","수6":"X","수7":"X","월1":"기술|106","월3":"기술|110","월4":"기술|108","월7":"X","화1":"기술|102","화4":"기술|104","화6":"기술|108","화7":"기술|110"},"d":"기술가정"},{"n":"이재하","h":17,"s":{"금2":"과학1|110","금3":"생활과학 D 3D|310","금5":"생활과학 A 3A|312","금7":"과학1|109","목1":"과학1|104","목2":"과학1|111","목5":"과학1|102","수1":"생활과학 A 3A|312","수3":"생활과학 D 3D|310","수4":"과학1|107","수5":"X","수6":"X","수7":"X","월1":"생활과학 A 3A|312","월2":"과학1|108","월5":"과학1|101","월7":"X","화2":"과학1|103","화4":"생활과학 D 3D|310","화5":"과학1|106","화7":"과학1|105"},"d":"과학"},{"n":"이한솔","h":5,"s":{"금4":"1공강|109","목6":"1공강|106","목7":"1공강|107","수5":"X","수6":"X","수7":"X","월7":"X","화3":"2공강|202","화5":"2공강|201"},"d":"기타(공강담당)"},{"n":"이현주","h":16,"s":{"금1":"과탐실1|108","금3":"과탐실1|101","금4":"과탐실1|108","금5":"과학1|102","목3":"과탐실1|103","목4":"과탐실1|110","목6":"과탐실1|110","수3":"과학1|105","수5":"X","수6":"X","수7":"X","월1":"과탐실1|109","월3":"과탐실1|111","월4":"과학1|104","월6":"과탐실1|106","월7":"X","화1":"과탐실1|109","화3":"과탐실1|107","화4":"과탐실1|111","화6":"과탐실1|107"},"d":"과학"},{"n":"장수영","h":18,"s":{"금1":"정보|109","금4":"정보|101","금5":"정보|111","금6":"정보|107","목1":"정보|105","목3":"정보|107","목4":"정보|101","목6":"정보|111","목7":"정보|109","수1":"정보|109","수3":"정보|103","수5":"X","수6":"X","수7":"X","월1":"정보|101","월2":"정보|105","월5":"정보|107","월6":"정보|103","월7":"X","화3":"정보|111","화4":"정보|103","화6":"정보|105"},"d":"정보"},{"n":"정수한","h":18,"s":{"금1":"X","금2":"2세계사 C 2C-3|201","금4":"2세계사 A 2A-2|201","금6":"2세계사|204","금7":"2세계사 B 2B-3|201","목1":"X","목2":"2세계사|205","목3":"2세계사 D 2D-3|201","목5":"2세계사 B 2B-2|201","목7":"2세계사 A 2A-3|201","수1":"2세계사|204","수2":"2세계사 D 2D-2|201","수4":"2세계사 C 2C-2|201","수5":"X","수6":"X","수7":"X","월1":"X","월2":"2세계사 A 2A|201","월4":"2세계사 C 2C|201","월6":"2세계사|205","월7":"X","화2":"2세계사 B 2B|201","화3":"2세계사|204","화5":"2세계사|205","화6":"2세계사 D 2D|201"},"d":"사회"},{"n":"정유진","h":18,"s":{"금1":"3진로|307","금3":"생명Ⅱ D 3D|306","금5":"생명Ⅱ A 3A|306","목2":"생명Ⅱ B 3B|306","목3":"3공강|309","목5":"3공강|310","목6":"생명Ⅱ C 3C|306","수1":"생명Ⅱ A 3A|306","수2":"3공강|309","수3":"생명Ⅱ D 3D|306","수5":"X","수6":"X","수7":"X","월1":"생명Ⅱ A 3A|306","월3":"생명Ⅱ B 3B|306","월4":"3진로|307","월6":"생명Ⅱ C 3C|306","월7":"X","화3":"생명Ⅱ C 3C|306","화4":"생명Ⅱ D 3D|306","화6":"3진로|308","화7":"생명Ⅱ B 3B|306"},"d":"과학"},{"n":"조미선","h":16,"s":{"금2":"영어1|104","금3":"영어1|105","금5":"영어1|103","금7":"영어1|101","목1":"영어1|101","목2":"영어1|109","목4":"영어1|105","목7":"영어1|102","수3":"영어1|110","수4":"영어1|102","수5":"X","수6":"X","수7":"X","월1":"영어1|111","월2":"영어1|106","월5":"영어1|103","월7":"X","화3":"영어1|108","화4":"영어1|107","화6":"영어1|104"},"d":"영어"},{"n":"조용주","h":16,"s":{"금1":"X","금2":"사회1|105","금3":"사회1|107","금4":"실경 3L2347-2|307","목1":"실경 3L2347|307","목2":"사회1|105","목3":"사회1|110","목5":"사회1|111","수1":"사회1|103","수2":"사회1|106","수5":"X","수6":"X","수7":"X","월2":"사회1|104","월3":"사회1|106","월4":"사회1|109","월7":"X","화1":"사회1|108","화2":"사회1|102","화4":"사회1|101","화7":"사회1|103"},"d":"사회"},{"n":"조은영","h":15,"s":{"금1":"X","금2":"사회1|111","금5":"사회1|101","금6":"사회1|108","목1":"사회1|106","목2":"사회1|104","목4":"사회1|109","목5":"사회1|108","수1":"사회1|107","수3":"사회1|109","수4":"사회1|105","수5":"X","수6":"X","수7":"X","월4":"사회1|102","월6":"사회1|110","월7":"X","화1":"사회1|111","화3":"사회1|103","화5":"사회1|110"},"d":"사회"},{"n":"지미영","h":16,"s":{"금1":"수학1|101","금3":"수학1|103","금5":"수학1|104","금6":"1공강|111","목1":"수학1|102","목4":"수학1|111","목6":"수학1|101","목7":"수학1|104","수2":"수학1|102","수3":"수학1|111","수5":"X","수6":"X","수7":"X","월1":"수학1|103","월4":"수학1|111","월6":"수학1|102","월7":"X","화2":"수학1|101","화3":"수학1|104","화5":"수학1|103"},"d":"수학"},{"n":"진현창","h":16,"s":{"금1":"대수|207","금2":"대수|206","금5":"대수|204","금6":"대수|205","목3":"대수|205","목6":"대수|204","수1":"대수|207","수4":"대수|206","수5":"X","수6":"X","수7":"X","월1":"대수|205","월3":"대수|206","월5":"대수|207","월6":"대수|204","월7":"X","화1":"대수|204","화3":"대수|206","화5":"대수|207","화7":"대수|205"},"d":"수학"},{"n":"최명기","h":1,"s":{"금5":"2공강|211","수5":"X","수6":"X","수7":"X","월7":"X"},"d":"기타(공강담당)"},{"n":"최보연","h":17,"s":{"금1":"사회1|103","금4":"사회1|104","금6":"사회1|110","금7":"법사 B 2B-3|214","목3":"법사 D 2D-3|214","목5":"법사 B 2B-2|214","목6":"사회1|102","수1":"사회1|108","수2":"법사 D 2D-2|214","수4":"사회1|101","수5":"X","수6":"X","수7":"X","월2":"사회1|111","월4":"사회1|107","월5":"사회1|105","월7":"X","화1":"사회1|106","화2":"법사 B 2B|214","화4":"사회1|109","화6":"법사 D 2D|214"},"d":"사회"},{"n":"최선아","h":16,"s":{"금1":"문학|205","금3":"고전읽기 D 3D|301","금5":"고전읽기 A 3A|301","목1":"심리학 3L2347|303","목2":"고전읽기 B 3B|301","목4":"문학|211","수1":"문학|208","수3":"문학|210","수5":"X","수6":"X","수7":"X","월1":"문학|207","월3":"문학|202","월4":"문학|206","월6":"문학|201","월7":"X","화2":"문학|203","화4":"문학|204","화5":"문학|203","화7":"문학|209"},"d":"국어"},{"n":"최영희","h":17,"s":{"금1":"독서|308","금2":"독서|304","금6":"독서|303","금7":"독서|309","목1":"독서|305","목3":"독서|302","목4":"독서|305","목5":"독서|303","수2":"독서|301","수4":"독서|304","수5":"X","수6":"X","수7":"X","월2":"독서|305","월4":"독서|301","월5":"독서|307","월7":"X","화1":"독서|305","화2":"독서|306","화5":"심리학|310","화6":"독서|302"},"d":"국어"},{"n":"최지호","h":17,"s":{"금2":"체육1|101","금4":"체육1|105","금6":"체육1|106","금7":"체육1|110","목2":"체육1|107","목3":"체육1|108","목5":"체육1|103","목6":"체육1|105","수1":"체육1|104","수2":"체육1|109","수3":"체육1|102","수5":"X","수6":"X","수7":"X","월1":"체육1|104","월2":"체육1|103","월4":"체육1|106","월7":"X","화1":"체육1|101","화5":"체육1|102","화7":"체육1|111"},"d":"체육"},{"n":"한호연","h":16,"s":{"금2":"문학|207","금4":"문학|209","금5":"문학|203","목1":"문학|201","목2":"문학|208","목4":"문학|207","목6":"문학|210","수3":"문학|205","수5":"X","수6":"X","수7":"X","월1":"문학|204","월3":"문학|208","월5":"문학|211","월6":"문학|209","월7":"X","화1":"문학|202","화4":"문학|210","화5":"문학|206","화7":"문학|211"},"d":"국어"},{"n":"허정옥","h":16,"s":{"금1":"음악|111","금4":"음악|107","금6":"음악|109","금7":"음악|108","목2":"음악|110","목4":"음악|107","목5":"1공강|105","목7":"음악|108","수2":"음악|110","수5":"X","수6":"X","수7":"X","월1":"음악|108","월3":"음악|109","월5":"음악|110","월6":"음악|111","월7":"X","화1":"음악|107","화2":"음악|111","화5":"음악|109"},"d":"예술(음악)"},{"n":"황성주","h":3,"s":{"수5":"X","수6":"X","수7":"X","월7":"X","화2":"체육1|107","화3":"체육1|109","화4":"체육1|108"},"d":"체육"},{"n":"황윤진","h":17,"s":{"금1":"독서|309","금4":"독서|301","금6":"독서|306","금7":"독서|307","목1":"독서|308","목3":"심리학|310","목4":"독서|309","목5":"독서|306","수2":"심리학|310","수4":"독서|305","수5":"X","수6":"X","수7":"X","월2":"독서|303","월4":"독서|308","월5":"독서|302","월7":"X","화1":"독서|307","화2":"독서|308","화5":"독서|304","화6":"심리학|310"},"d":"국어"}];
+const CLASS_DATA={"students":{"21001":{"n":"강동우","s":{"월1":"대수|박효덕","월2":"경제|강수미","월3":"스포츠생활1|김재필","월4":"2세계사|정수한","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"현대사회와윤리(나)|박수현","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"현대사회와윤리(나)|박수현","목6":"문학|한호연","목7":"경제|강수미","금1":"2공강|박보경","금2":"2세계사|정수한","금3":"인공지능수학|송인식","금4":"경제|강수미","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"현대사회와윤리(나)|박수현"},"g":"사회(경제/세계사/윤리나)"},"21002":{"n":"강문석","s":{"월1":"대수|박효덕","월2":"생명과학|오남님","월3":"스포츠생활1|김재필","월4":"화학|구정현","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"물리학|김달수","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"화학|구정현","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"물리학|김달수","목6":"문학|한호연","목7":"생명과학|오남님","금1":"2공강|박보경","금2":"화학|서강욱","금3":"인공지능수학|송인식","금4":"생명과학|오남님","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"물리학|김달수"},"g":"과학(물화생)"},"21003":{"n":"강차형","s":{"월1":"대수|박효덕","월2":"물리학|김달수","월3":"스포츠생활1|김재필","월4":"생명과학|오남님","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"화학|구정현","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"생명과학|오남님","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"화학|구정현","목6":"문학|한호연","목7":"물리학|김달수","금1":"2공강|박보경","금2":"생명과학|오남님","금3":"인공지능수학|송인식","금4":"물리학|김달수","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"화학|서강욱"},"g":"과학(물화생)-2"},"21004":{"n":"김시환","s":{"월1":"대수|박효덕","월2":"화학|구정현","월3":"스포츠생활1|김재필","월4":"물리학|김달수","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"생명과학|오남님","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"물리학|김달수","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"생명과학|오남님","목6":"문학|한호연","목7":"화학|서강욱","금1":"2공강|박보경","금2":"물리학|김달수","금3":"인공지능수학|송인식","금4":"화학|구정현","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"생명과학|오남님"},"g":"과학(물화생)-3"},"21005":{"n":"김정진","s":{"월1":"대수|박효덕","월2":"물리학|김달수","월3":"스포츠생활1|김재필","월4":"생명과학|오남님","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"화학|구정현","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"생명과학|오남님","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"화학|구정현","목6":"문학|한호연","목7":"물리학|김달수","금1":"2공강|박보경","금2":"생명과학|오남님","금3":"인공지능수학|송인식","금4":"물리학|김달수","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"화학|서강욱"},"g":"과학(물화생)-2"},"21006":{"n":"김주언","s":{"월1":"대수|박효덕","월2":"화학|구정현","월3":"스포츠생활1|김재필","월4":"생명과학|오남님","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"현대사회와윤리(가)|김예진","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"생명과학|오남님","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"현대사회와윤리(가)|김예진","목6":"문학|한호연","목7":"화학|서강욱","금1":"2공강|박보경","금2":"생명과학|오남님","금3":"인공지능수학|송인식","금4":"화학|구정현","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"현대사회와윤리(가)|김예진"},"g":"윤리(가)+과학(화생)"},"21007":{"n":"김화랑","s":{"월1":"대수|박효덕","월2":"화학|구정현","월3":"스포츠생활1|김재필","월4":"물리학|김달수","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"생명과학|오남님","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"물리학|김달수","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"생명과학|오남님","목6":"문학|한호연","목7":"화학|서강욱","금1":"2공강|박보경","금2":"물리학|김달수","금3":"인공지능수학|송인식","금4":"화학|구정현","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"생명과학|오남님"},"g":"과학(물화생)-3"},"21008":{"n":"나규빈","s":{"월1":"대수|박효덕","월2":"물리학|김달수","월3":"스포츠생활1|김재필","월4":"생명과학|오남님","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"화학|구정현","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"생명과학|오남님","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"화학|구정현","목6":"문학|한호연","목7":"물리학|김달수","금1":"2공강|박보경","금2":"생명과학|오남님","금3":"인공지능수학|송인식","금4":"물리학|김달수","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"화학|서강욱"},"g":"과학(물화생)-2"},"21009":{"n":"박서준","s":{"월1":"대수|박효덕","월2":"물리학|김달수","월3":"스포츠생활1|김재필","월4":"화학|구정현","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"생명과학|오남님","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"화학|구정현","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"생명과학|오남님","목6":"문학|한호연","목7":"물리학|김달수","금1":"2공강|박보경","금2":"화학|서강욱","금3":"인공지능수학|송인식","금4":"물리학|김달수","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"생명과학|오남님"},"g":"과학(물화생)-4"},"21010":{"n":"박태강","s":{"월1":"대수|박효덕","월2":"생명과학|오남님","월3":"스포츠생활1|김재필","월4":"화학|구정현","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"물리학|김달수","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"화학|구정현","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"물리학|김달수","목6":"문학|한호연","목7":"생명과학|오남님","금1":"2공강|박보경","금2":"화학|서강욱","금3":"인공지능수학|송인식","금4":"생명과학|오남님","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"물리학|김달수"},"g":"과학(물화생)"},"21011":{"n":"서현우","s":{"월1":"대수|박효덕","월2":"생명과학|오남님","월3":"스포츠생활1|김재필","월4":"물리학|김달수","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"화학|구정현","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"물리학|김달수","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"화학|구정현","목6":"문학|한호연","목7":"생명과학|오남님","금1":"2공강|박보경","금2":"물리학|김달수","금3":"인공지능수학|송인식","금4":"생명과학|오남님","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"화학|서강욱"},"g":"과학(물화생)-5"},"21012":{"n":"서홍빈","s":{"월1":"대수|박효덕","월2":"화학|구정현","월3":"스포츠생활1|김재필","월4":"생명과학|오남님","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"물리학|김달수","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"생명과학|오남님","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"물리학|김달수","목6":"문학|한호연","목7":"화학|서강욱","금1":"2공강|박보경","금2":"생명과학|오남님","금3":"인공지능수학|송인식","금4":"화학|구정현","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"물리학|김달수"},"g":"과학(물화생)-6"},"21013":{"n":"손영후","s":{"월1":"대수|박효덕","월2":"경제|강수미","월3":"스포츠생활1|김재필","월4":"2세계사|정수한","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"현대사회와윤리(나)|박수현","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"2세계사|정수한","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"현대사회와윤리(나)|박수현","목6":"문학|한호연","목7":"경제|강수미","금1":"2공강|박보경","금2":"2세계사|정수한","금3":"인공지능수학|송인식","금4":"경제|강수미","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"현대사회와윤리(나)|박수현"},"g":"사회(경제/세계사/윤리나)-2"},"21014":{"n":"양현우","s":{"월1":"대수|박효덕","월2":"생명과학|오남님","월3":"스포츠생활1|김재필","월4":"물리학|김달수","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"화학|구정현","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"물리학|김달수","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"화학|구정현","목6":"문학|한호연","목7":"생명과학|오남님","금1":"2공강|박보경","금2":"물리학|김달수","금3":"인공지능수학|송인식","금4":"생명과학|오남님","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"화학|서강욱"},"g":"과학(물화생)-5"},"21015":{"n":"우주호","s":{"월1":"대수|박효덕","월2":"생명과학|오남님","월3":"스포츠생활1|김재필","월4":"화학|구정현","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"현대사회와윤리(가)|김예진","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"화학|구정현","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"현대사회와윤리(가)|김예진","목6":"문학|한호연","목7":"생명과학|오남님","금1":"2공강|박보경","금2":"화학|서강욱","금3":"인공지능수학|송인식","금4":"생명과학|오남님","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"현대사회와윤리(가)|김예진"},"g":"윤리(가)+과학(화생)-2"},"21016":{"n":"윤성호","s":{"월1":"대수|박효덕","월2":"화학|구정현","월3":"스포츠생활1|김재필","월4":"생명과학|오남님","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"현대사회와윤리(가)|김예진","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"생명과학|오남님","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"현대사회와윤리(가)|김예진","목6":"문학|한호연","목7":"화학|서강욱","금1":"2공강|박보경","금2":"생명과학|오남님","금3":"인공지능수학|송인식","금4":"화학|구정현","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"현대사회와윤리(가)|김예진"},"g":"윤리(가)+과학(화생)"},"21017":{"n":"이태욱","s":{"월1":"대수|박효덕","월2":"생명과학|오남님","월3":"스포츠생활1|김재필","월4":"화학|구정현","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"물리학|김달수","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"화학|구정현","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"물리학|김달수","목6":"문학|한호연","목7":"생명과학|오남님","금1":"2공강|박보경","금2":"화학|서강욱","금3":"인공지능수학|송인식","금4":"생명과학|오남님","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"물리학|김달수"},"g":"과학(물화생)"},"21018":{"n":"이현제","s":{"월1":"대수|박효덕","월2":"물리학|김달수","월3":"스포츠생활1|김재필","월4":"화학|구정현","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"생명과학|오남님","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"화학|구정현","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"생명과학|오남님","목6":"문학|한호연","목7":"물리학|김달수","금1":"2공강|박보경","금2":"화학|서강욱","금3":"인공지능수학|송인식","금4":"물리학|김달수","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"생명과학|오남님"},"g":"과학(물화생)-4"},"21019":{"n":"장민기","s":{"월1":"대수|박효덕","월2":"화학|구정현","월3":"스포츠생활1|김재필","월4":"생명과학|오남님","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"물리학|김달수","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"생명과학|오남님","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"물리학|김달수","목6":"문학|한호연","목7":"화학|서강욱","금1":"2공강|박보경","금2":"생명과학|오남님","금3":"인공지능수학|송인식","금4":"화학|구정현","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"물리학|김달수"},"g":"과학(물화생)-6"},"21020":{"n":"정우진","s":{"월1":"대수|박효덕","월2":"물리학|김달수","월3":"스포츠생활1|김재필","월4":"생명과학|오남님","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"화학|구정현","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"생명과학|오남님","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"화학|구정현","목6":"문학|한호연","목7":"물리학|김달수","금1":"2공강|박보경","금2":"생명과학|오남님","금3":"인공지능수학|송인식","금4":"물리학|김달수","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"화학|서강욱"},"g":"과학(물화생)-2"},"21021":{"n":"정주헌","s":{"월1":"대수|박효덕","월2":"생명과학|오남님","월3":"스포츠생활1|김재필","월4":"화학|구정현","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"물리학|김달수","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"화학|구정현","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"물리학|김달수","목6":"문학|한호연","목7":"생명과학|오남님","금1":"2공강|박보경","금2":"화학|서강욱","금3":"인공지능수학|송인식","금4":"생명과학|오남님","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"물리학|김달수"},"g":"과학(물화생)"},"21022":{"n":"정혜성","s":{"월1":"대수|박효덕","월2":"경제|강수미","월3":"스포츠생활1|김재필","월4":"2세계사|정수한","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"현대사회와윤리(나)|박수현","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"2세계사|정수한","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"현대사회와윤리(나)|박수현","목6":"문학|한호연","목7":"경제|강수미","금1":"2공강|박보경","금2":"2세계사|정수한","금3":"인공지능수학|송인식","금4":"경제|강수미","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"현대사회와윤리(나)|박수현"},"g":"사회(경제/세계사/윤리나)-2"},"21023":{"n":"조은혁","s":{"월1":"대수|박효덕","월2":"화학|구정현","월3":"스포츠생활1|김재필","월4":"생명과학|오남님","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"물리학|김달수","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"생명과학|오남님","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"물리학|김달수","목6":"문학|한호연","목7":"화학|서강욱","금1":"2공강|박보경","금2":"생명과학|오남님","금3":"인공지능수학|송인식","금4":"화학|구정현","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"물리학|김달수"},"g":"과학(물화생)-6"},"21024":{"n":"주섭규","s":{"월1":"대수|박효덕","월2":"생명과학|오남님","월3":"스포츠생활1|김재필","월4":"물리학|김달수","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"화학|구정현","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"물리학|김달수","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"화학|구정현","목6":"문학|한호연","목7":"생명과학|오남님","금1":"2공강|박보경","금2":"물리학|김달수","금3":"인공지능수학|송인식","금4":"생명과학|오남님","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"화학|서강욱"},"g":"과학(물화생)-5"},"21025":{"n":"주창건","s":{"월1":"대수|박효덕","월2":"생명과학|오남님","월3":"스포츠생활1|김재필","월4":"화학|구정현","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"물리학|김달수","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"화학|구정현","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"물리학|김달수","목6":"문학|한호연","목7":"생명과학|오남님","금1":"2공강|박보경","금2":"화학|서강욱","금3":"인공지능수학|송인식","금4":"생명과학|오남님","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"물리학|김달수"},"g":"과학(물화생)"},"21026":{"n":"최정호","s":{"월1":"대수|박효덕","월2":"물리학|김달수","월3":"스포츠생활1|김재필","월4":"화학|구정현","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"생명과학|오남님","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"화학|구정현","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"생명과학|오남님","목6":"문학|한호연","목7":"물리학|김달수","금1":"2공강|박보경","금2":"화학|서강욱","금3":"인공지능수학|송인식","금4":"물리학|김달수","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"생명과학|오남님"},"g":"과학(물화생)-4"},"21027":{"n":"최태민","s":{"월1":"대수|박효덕","월2":"화학|구정현","월3":"스포츠생활1|김재필","월4":"물리학|김달수","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"생명과학|오남님","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"물리학|김달수","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"생명과학|오남님","목6":"문학|한호연","목7":"화학|서강욱","금1":"2공강|박보경","금2":"물리학|김달수","금3":"인공지능수학|송인식","금4":"화학|구정현","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"생명과학|오남님"},"g":"과학(물화생)-3"},"21028":{"n":"한동욱","s":{"월1":"대수|박효덕","월2":"경제|강수미","월3":"스포츠생활1|김재필","월4":"2세계사|정수한","월5":"문학|김연경","월6":"영어Ⅰ|김미경","화1":"영어Ⅰ|김소정","화2":"현대사회와윤리(나)|박수현","화3":"일본어|김혜영일본","화4":"문학|한호연","화5":"인공지능수학|송인식","화6":"대수|박효덕","화7":"스포츠생활1|김병진","수1":"인공지능수학|송인식","수2":"일본어|김혜영일본","수3":"문학|최선아","수4":"2세계사|정수한","목1":"영어Ⅰ|김동희","목2":"2진로|김혜영일본","목3":"대수|박효덕","목4":"일본어|김혜영일본","목5":"현대사회와윤리(나)|박수현","목6":"문학|한호연","목7":"경제|강수미","금1":"2공강|박보경","금2":"2세계사|정수한","금3":"인공지능수학|송인식","금4":"경제|강수미","금5":"대수|박효덕","금6":"영어Ⅰ|김동희","금7":"현대사회와윤리(나)|박수현"},"g":"사회(경제/세계사/윤리나)-2"}},"groups":{"사회(경제/세계사/윤리나)":{"slots":{"월2":"경제","월4":"2세계사","화2":"현대사회와윤리(나)","수4":"","목5":"현대사회와윤리(나)","금2":"2세계사","금4":"경제","금7":"현대사회와윤리(나)"},"students":[{"id":"21001","name":"강동우"}]},"과학(물화생)":{"slots":{"월2":"생명과학","월4":"화학","화2":"물리학","수4":"화학","목5":"물리학","금2":"화학","금4":"생명과학","금7":"물리학"},"students":[{"id":"21002","name":"강문석"},{"id":"21010","name":"박태강"},{"id":"21017","name":"이태욱"},{"id":"21021","name":"정주헌"},{"id":"21025","name":"주창건"}]},"과학(물화생)-2":{"slots":{"월2":"물리학","월4":"생명과학","화2":"화학","수4":"생명과학","목5":"화학","금2":"생명과학","금4":"물리학","금7":"화학"},"students":[{"id":"21003","name":"강차형"},{"id":"21005","name":"김정진"},{"id":"21008","name":"나규빈"},{"id":"21020","name":"정우진"}]},"과학(물화생)-3":{"slots":{"월2":"화학","월4":"물리학","화2":"생명과학","수4":"물리학","목5":"생명과학","금2":"물리학","금4":"화학","금7":"생명과학"},"students":[{"id":"21004","name":"김시환"},{"id":"21007","name":"김화랑"},{"id":"21027","name":"최태민"}]},"윤리(가)+과학(화생)":{"slots":{"월2":"화학","월4":"생명과학","화2":"현대사회와윤리(가)","수4":"생명과학","목5":"현대사회와윤리(가)","금2":"생명과학","금4":"화학","금7":"현대사회와윤리(가)"},"students":[{"id":"21006","name":"김주언"},{"id":"21016","name":"윤성호"}]},"과학(물화생)-4":{"slots":{"월2":"물리학","월4":"화학","화2":"생명과학","수4":"화학","목5":"생명과학","금2":"화학","금4":"물리학","금7":"생명과학"},"students":[{"id":"21009","name":"박서준"},{"id":"21018","name":"이현제"},{"id":"21026","name":"최정호"}]},"과학(물화생)-5":{"slots":{"월2":"생명과학","월4":"물리학","화2":"화학","수4":"물리학","목5":"화학","금2":"물리학","금4":"생명과학","금7":"화학"},"students":[{"id":"21011","name":"서현우"},{"id":"21014","name":"양현우"},{"id":"21024","name":"주섭규"}]},"과학(물화생)-6":{"slots":{"월2":"화학","월4":"생명과학","화2":"물리학","수4":"생명과학","목5":"물리학","금2":"생명과학","금4":"화학","금7":"물리학"},"students":[{"id":"21012","name":"서홍빈"},{"id":"21019","name":"장민기"},{"id":"21023","name":"조은혁"}]},"사회(경제/세계사/윤리나)-2":{"slots":{"월2":"경제","월4":"2세계사","화2":"현대사회와윤리(나)","수4":"2세계사","목5":"현대사회와윤리(나)","금2":"2세계사","금4":"경제","금7":"현대사회와윤리(나)"},"students":[{"id":"21013","name":"손영후"},{"id":"21022","name":"정혜성"},{"id":"21028","name":"한동욱"}]},"윤리(가)+과학(화생)-2":{"slots":{"월2":"생명과학","월4":"화학","화2":"현대사회와윤리(가)","수4":"화학","목5":"현대사회와윤리(가)","금2":"화학","금4":"생명과학","금7":"현대사회와윤리(가)"},"students":[{"id":"21015","name":"우주호"}]}},"optional_slots":["월2","월4","화2","수4","목5","금2","금4","금7"]};
+
+const CL={"수학":"#fff4e1","대수":"#fff4e1","미적분":"#fff4e1","인공수학":"#fff4e1","경제수학":"#fff4e1","수학1":"#fff4e1","국어1":"#e8f5e9","문학":"#e8f5e9","독서":"#e8f5e9","고전읽기":"#e8f5e9","영어Ⅰ":"#e3f2fd","영어Ⅱ":"#e3f2fd","영어1":"#e3f2fd","진로영어":"#e3f2fd","영어발표":"#e3f2fd","화학":"#ffebee","물리학":"#ffebee","생명":"#ffebee","물리Ⅱ":"#ffebee","생명Ⅱ":"#ffebee","화학Ⅱ":"#ffebee","지구Ⅱ":"#ffebee","과학1":"#ffebee","과탐실1":"#ffebee","생활과학":"#ffebee","사회1":"#f3e5f5","한국사1":"#f3e5f5","2세계사":"#f3e5f5","3세계사":"#f3e5f5","세지":"#f3e5f5","시민지리":"#f3e5f5","경제":"#f3e5f5","법사":"#f3e5f5","사문":"#f3e5f5","사문탐":"#f3e5f5","실경":"#f3e5f5","체육1":"#fffde7","스포츠":"#fffde7","스포츠1":"#fffde7","음악":"#fce4ec","미술":"#fce4ec","기술":"#e0f2f1","정보":"#e0f2f1","매체의사":"#e0f2f1","보건":"#ffcdd2","생윤(가)":"#ede7f6","생윤(나)":"#ede7f6","현윤(가)":"#ede7f6","현윤(나)":"#ede7f6","심리학":"#ede7f6","환경":"#dcedc8","한문Ⅰ":"#fff3e0","중국어":"#fff3e0","중국어Ⅱ":"#fff3e0","일본어":"#fff3e0","여행":"#e1f5fe"};
+
+const DEPTS=["전체","국어","수학","영어","사회","과학","도덕/윤리","체육","예술(음악)","예술(미술)","기술가정","정보","제2외국어/한문","진로","기타(공강담당)"];
+
+function pc(v){if(!v||v==="X")return null;const i=v.lastIndexOf("|");if(i<0)return{subj:v,full:v,room:""};const full=v.substring(0,i);return{subj:full.split(" ")[0],full,room:v.substring(i+1)};}
+function gs(t,d,p){const k=d+p;const v=t.s[k];if(!v)return"free";if(v==="X")return"mark";return"busy";}
+function gc(s){return CL[s]||"#f5f5f7";}
+
+// State
+let TAB="swap",ME=null,SEL=null,SEARCH="",DP=null,MULTI=[],DEPT_FILTER="전체";
+let ROOM=null,ANALYSIS_SORT="hours",EVENT_DAYS=[],EVENT_PERIODS=[];
+let VIEW_MODE="class",SELECTED_STUDENT=null,SELECTED_GROUP=null;
+let SHEET_OPEN=false,SHEET_CONTENT="";
+let MORE_OPEN=false;
+
+// Navigation (primary tabs in bottom bar, secondary in "more")
+const NAV_PRIMARY=[
+  {id:"swap",icon:"🔄",label:"교체"},
+  {id:"find",icon:"🔍",label:"공강"},
+  {id:"myclass",icon:"🎯",label:"우리반"},
+  {id:"analysis",icon:"📊",label:"분석"}
+];
+const NAV_MORE=[
+  {id:"common",icon:"👥",label:"공통 공강"},
+  {id:"room",icon:"🏫",label:"교실 현황"},
+  {id:"heatmap",icon:"🔥",label:"수업 밀도 히트맵"},
+  {id:"event",icon:"🗓️",label:"행사 시수 계산"},
+  {id:"view",icon:"📅",label:"개별 시간표 조회"}
+];
+
+function setTab(id){
+  TAB=id;
+  SEL=null;DP=null;ROOM=null;MORE_OPEN=false;SHEET_OPEN=false;
+  render();
+  document.querySelector('.content').scrollTop=0;
+}
+function setMe(i){ME=i;SEL=null;SEARCH="";SHEET_OPEN=false;render()}
+function setSel(k){SEL=SEL===k?null:k;render()}
+function setDP(k){DP=DP===k?null:k;render()}
+function setRoom(r){ROOM=r;render()}
+function setDeptFilter(d){DEPT_FILTER=d;render()}
+function toggleMulti(i){const idx=MULTI.indexOf(i);if(idx>=0)MULTI.splice(idx,1);else MULTI.push(i);render()}
+function clearMulti(){MULTI=[];render()}
+function setAnalysisSort(s){ANALYSIS_SORT=s;render()}
+function toggleEventDay(d){const i=EVENT_DAYS.indexOf(d);if(i>=0)EVENT_DAYS.splice(i,1);else EVENT_DAYS.push(d);render()}
+function toggleEventPeriod(p){const i=EVENT_PERIODS.indexOf(p);if(i>=0)EVENT_PERIODS.splice(i,1);else EVENT_PERIODS.push(p);render()}
+function clearEvent(){EVENT_DAYS=[];EVENT_PERIODS=[];render()}
+function setViewMode(m){VIEW_MODE=m;SELECTED_STUDENT=null;SELECTED_GROUP=null;render()}
+function setStudent(sid){SELECTED_STUDENT=sid;VIEW_MODE="student";render()}
+function setGroup(g){SELECTED_GROUP=g;VIEW_MODE="group";render()}
+function toggleMore(){MORE_OPEN=!MORE_OPEN;render()}
+
+function openSheet(title,body){
+  SHEET_OPEN=true;
+  document.getElementById('sheetTitle').textContent=title;
+  document.getElementById('sheetBody').innerHTML=body;
+  document.getElementById('sheet').classList.add('open');
+  document.getElementById('sheetOverlay').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+function closeSheet(){
+  SHEET_OPEN=false;
+  document.getElementById('sheet').classList.remove('open');
+  document.getElementById('sheetOverlay').classList.remove('open');
+  document.body.style.overflow='';
+}
+
+function copyText(elId,btnId){
+  const el=document.getElementById(elId);
+  if(!el)return;
+  const text=el.innerText;
+  const btn=document.getElementById(btnId);
+  const done=()=>{if(btn){const orig=btn.innerHTML;btn.innerHTML='✓ 복사완료';btn.style.background='#2e7d32';setTimeout(()=>{btn.innerHTML=orig;btn.style.background='';},1500)}};
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(text).then(done).catch(()=>{fallback(text,done)});
+  }else{fallback(text,done)}
+}
+function fallback(text,done){
+  const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.top='-9999px';document.body.appendChild(ta);ta.select();
+  try{document.execCommand('copy');done()}catch(e){alert('복사 실패')}
+  document.body.removeChild(ta);
+}
+
+function filterByDept(list){return DEPT_FILTER==="전체"?list:list.filter(t=>t.d===DEPT_FILTER)}
+function deptCounts(){const c={"전체":T.length};T.forEach(t=>{c[t.d]=(c[t.d]||0)+1});return c}
+
+// ========== Renderers ==========
+function renderTopbar(){
+  let tabInfo={swap:{t:"수업 교체",s:"내 수업을 다른 교사와 바꾸거나 대강 찾기"},find:{t:"시간별 공강",s:"특정 시간 공강 교사 찾기"},common:{t:"공통 공강",s:"여러 교사 동시 공강 시간"},myclass:{t:"우리반",s:"2학년 10반 관리"},room:{t:"교실 현황",s:"교실별 사용 현황"},analysis:{t:"근무 분석",s:"교사별 시수·연강 통계"},heatmap:{t:"수업 밀도",s:"시간대별 수업량 분포"},event:{t:"행사 계산",s:"시험/행사 시수 변동 계산"},view:{t:"시간표 조회",s:"개별 교사 시간표"}};
+  const info=tabInfo[TAB]||{t:"교무도우미",s:""};
+  return `<div class="topbar"><div class="topbar-content"><div><div class="topbar-title">${info.t}</div><div class="topbar-sub">${info.s}</div></div><button class="topbar-btn" onclick="toggleMore()">⋯</button></div></div>`;
+}
+
+function renderBottomNav(){
+  let h='<div class="bottom-nav">';
+  NAV_PRIMARY.forEach(n=>{
+    const active=TAB===n.id;
+    h+=`<button class="nav-item${active?' active':''}" onclick="setTab('${n.id}')"><span class="icon">${n.icon}</span><span class="label">${n.label}</span></button>`;
+  });
+  const moreActive=NAV_MORE.some(n=>n.id===TAB);
+  h+=`<button class="nav-item${moreActive?' active':''}" onclick="toggleMore()"><span class="icon">⋯</span><span class="label">더보기</span></button>`;
+  h+='</div>';
+  return h;
+}
+
+function renderMoreMenu(){
+  let h='';
+  NAV_MORE.forEach(n=>{
+    const active=TAB===n.id;
+    h+=`<button class="${active?'active':''}" onclick="setTab('${n.id}')"><span class="icon">${n.icon}</span>${n.label}</button>`;
+  });
+  return h;
+}
+
+function renderSearchAndTeachers(onSelect,activeIdx){
+  let h='';
+  h+=`<input class="search-input" placeholder="🔍 선생님 이름으로 검색..." value="${SEARCH}" oninput="SEARCH=this.value;render()">`;
+  const counts=deptCounts();
+  h+='<div class="dept-row">';
+  DEPTS.forEach(d=>{
+    if(d!=="전체"&&!counts[d])return;
+    const active=DEPT_FILTER===d;
+    h+=`<button class="dept-chip${active?' active':''}" onclick="setDeptFilter('${d}')">${d}<span class="cnt">${counts[d]||0}</span></button>`;
+  });
+  h+='</div>';
+  const filtered=filterByDept(T).filter(t=>!SEARCH||t.n.includes(SEARCH));
+  h+='<div class="pill-wrap" style="max-height:200px;overflow-y:auto">';
+  filtered.forEach(t=>{const i=T.indexOf(t);const active=activeIdx===i;h+=`<button class="pill${active?' active':''}" onclick="${onSelect}(${i})">${t.n}<span class="tag">${t.h}h</span></button>`});
+  if(filtered.length===0)h+='<div class="empty-state" style="width:100%"><span class="emoji">🔍</span>검색 결과가 없습니다</div>';
+  h+='</div>';
+  return h;
+}
+
+function deptTag(t){return t.d?` <span class="dept-tag">${t.d}</span>`:''}
+
+function renderTimetable(teacher,onCellClick,selectedKey,hlKeys){
+  let h='<div class="tt-wrap"><table class="tt"><thead><tr><th>⏰</th>';
+  DAYS.forEach(d=>{h+=`<th>${d}</th>`});
+  h+='</tr></thead><tbody>';
+  PERIODS.forEach(pr=>{
+    h+=`<tr><td style="background:#f5f5f7;color:#86868b;font-weight:700;font-size:11px">${pr}</td>`;
+    DAYS.forEach(d=>{
+      const k=d+pr,s=gs(teacher,d,pr),c=pc(teacher.s[k]),isSel=selectedKey===k;
+      const isHl=hlKeys&&hlKeys.has(k);
+      let cls='';
+      if(s==='mark')cls='mark';
+      else if(s==='busy')cls='busy';
+      else cls='empty';
+      if(isSel)cls+=' sel';
+      if(isHl&&!isSel)cls+=' hl-free';
+      const bg=s==='busy'&&c?gc(c.subj):'';
+      const click=(onCellClick&&s==='busy')?`onclick="${onCellClick}('${k}')"`:'';
+      h+=`<td class="${cls}" ${bg&&!isSel?`style="background:${bg}"`:''} ${click}>`;
+      if(s==='mark')h+='<span style="color:#c7c7cc;font-size:9px">×</span>';
+      else if(s==='busy'&&c)h+=`<div class="sn">${c.full.length>8?c.subj:c.full}</div><div class="rm">${c.room}</div>`;
+      else h+='<span style="color:#d1d1d6;font-size:9px">·</span>';
+      h+='</td>';
+    });
+    h+='</tr>';
+  });
+  h+='</tbody></table></div>';
+  return h;
+}
+
+// ========== TAB: 수업 교체 ==========
+function renderSwapTab(){
+  let h='';
+  if(ME===null){
+    h+='<div class="card"><div class="help-text">💡 <b>본인 선생님 선택 → 교체할 수업 칸 클릭</b></div>';
+    h+=renderSearchAndTeachers('setMe',null);
+    h+='</div>';
+    return h;
+  }
+  const myT=T[ME];
+  h+=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div><div style="font-size:15px;font-weight:700">${myT.n}${deptTag(myT)}</div><div style="font-size:11px;color:#86868b;margin-top:2px">${myT.h}시수</div></div>`;
+  h+=`<button class="btn btn-sec btn-sm" onclick="ME=null;SEL=null;render()">변경</button></div>`;
+  h+=renderTimetable(myT,'setSel',SEL,null);
+  h+='</div>';
+
+  if(SEL){
+    const selCell=pc(myT.s[SEL]);
+    if(selCell){
+      const day=SEL[0],per=SEL.slice(1);
+      const subs=[],swaps=[];
+      T.forEach((t,i)=>{if(i===ME)return;if(gs(t,day,parseInt(per))==="free")subs.push({idx:i,name:t.n,dept:t.d})});
+      const myRoom=selCell.room;
+      T.forEach((t,i)=>{
+        if(i===ME)return;
+        if(gs(t,day,parseInt(per))!=="free")return;
+        DAYS.forEach(d2=>{PERIODS.forEach(p2=>{
+          const k2=d2+p2;const c2=pc(t.s[k2]);
+          if(!c2||c2.room!==myRoom)return;
+          if(gs(myT,d2,p2)!=="free")return;
+          if(gs(t,d2,p2)!=="busy")return;
+          swaps.push({idx:i,name:t.n,theirDay:d2,theirPer:p2,subj:c2.full,room:c2.room});
+        })});
+      });
+      h+=`<div class="selected-banner"><div class="subj">${selCell.full}</div><div class="meta">${day}요일 ${per}교시 · ${selCell.room}교실</div></div>`;
+      h+='<div class="card">';
+      h+=`<div class="result-head"><div class="card-title" style="margin:0;color:#2e7d32">✅ 대강 가능</div><span class="badge green">${subs.length}</span></div>`;
+      h+='<div class="card-sub">이 시간에 공강인 교사</div>';
+      if(subs.length===0)h+='<div class="empty-state"><span class="emoji">😔</span>공강인 교사가 없습니다</div>';
+      else{h+='<div class="chip-list">';subs.forEach(s=>{h+=`<button class="chip green-chip" onclick='showSubAnnouncement(${JSON.stringify({myName:myT.n,subName:s.name,day,per,subj:selCell.full,room:selCell.room}).replace(/'/g,"&#39;")})'>${s.name}<span class="dept-tag">${s.dept}</span></button>`});h+='</div>'}
+      h+='</div>';
+      h+='<div class="card">';
+      h+=`<div class="result-head"><div class="card-title" style="margin:0;color:#1a237e">🔄 수업 교체</div><span class="badge">${swaps.length}</span></div>`;
+      h+=`<div class="card-sub">같은 교실(${myRoom})에서 교체 가능한 수업</div>`;
+      if(swaps.length===0)h+='<div class="empty-state"><span class="emoji">🔍</span>교체 가능한 수업이 없습니다</div>';
+      else{swaps.forEach(s=>{h+=`<div class="swap-card" onclick='showSwapAnnouncement(${JSON.stringify({myName:myT.n,otherName:s.name,myDay:day,myPer:per,mySubj:selCell.full,myRoom:selCell.room,theirDay:s.theirDay,theirPer:s.theirPer,theirSubj:s.subj,theirRoom:s.room}).replace(/'/g,"&#39;")})'><div class="swap-card-top"><span class="swap-name">${s.name}</span><span class="swap-badge">${s.theirDay} ${s.theirPer}교시</span></div><div class="swap-detail"><b>${s.theirDay} ${s.theirPer}교시 ${s.subj}</b>(${s.room}교실)과 교체</div></div>`})}
+      h+='</div>';
+    }
+  }
+  return h;
+}
+
+function showSubAnnouncement(d){
+  const msg=`[대강 요청]\n\n${d.day}요일 ${d.per}교시\n${d.myName} 선생님의 수업을 ${d.subName} 선생님이 대강해주시기 바랍니다.\n\n• 과목: ${d.subj}\n• 교실: ${d.room}교실\n\n감사합니다.`;
+  const body=`<div class="announce-box" id="annText">${msg.replace(/\n/g,"\n")}</div><button class="btn btn-full" id="copyBtn" onclick="copyText('annText','copyBtn')" style="margin-top:10px">📋 안내문 복사하기</button>`;
+  openSheet('📢 대강 안내문',body);
+}
+
+function showSwapAnnouncement(d){
+  const msg=`[수업 교체 안내]\n\n${d.myName} 선생님과 ${d.otherName} 선생님 간 수업 교체\n\n▶ ${d.myDay}요일 ${d.myPer}교시 (${d.myRoom}교실)\n  기존: ${d.myName} - ${d.mySubj}\n  변경: ${d.otherName} - ${d.theirSubj}\n\n▶ ${d.theirDay}요일 ${d.theirPer}교시 (${d.theirRoom}교실)\n  기존: ${d.otherName} - ${d.theirSubj}\n  변경: ${d.myName} - ${d.mySubj}\n\n각 반 학생들은 수업 결손 없이 정상 수업받습니다.`;
+  const body=`<div class="announce-box" id="annText">${msg.replace(/\n/g,"\n")}</div><button class="btn btn-full" id="copyBtn" onclick="copyText('annText','copyBtn')" style="margin-top:10px">📋 안내문 복사하기</button>`;
+  openSheet('📢 교체 안내문',body);
+}
+
+// ========== TAB: 시간별 공강 ==========
+function renderFindTab(){
+  let h='';
+  h+='<div class="card">';
+  h+='<div class="help-text">💡 요일·교시를 선택하면 그 시간 <b>공강 교사 목록</b>이 나옵니다</div>';
+  h+='<div class="dp-grid">';
+  h+='<div class="dp-cell rowhdr"></div>';
+  DAYS.forEach(d=>{h+=`<div class="dp-cell hdr">${d}</div>`});
+  PERIODS.forEach(p=>{
+    h+=`<div class="dp-cell rowhdr">${p}</div>`;
+    DAYS.forEach(d=>{
+      const k=d+p;
+      h+=`<div class="dp-cell${DP===k?' active':''}" onclick="setDP('${k}')">선택</div>`;
+    });
+  });
+  h+='</div></div>';
+  
+  if(!DP){h+='<div class="empty-state"><span class="emoji">👆</span>요일과 교시를 선택해주세요</div>';return h}
+  
+  const day=DP[0],per=parseInt(DP.slice(1));
+  const free=[],busy=[];
+  T.forEach(t=>{
+    const s=gs(t,day,per);
+    if(s==="free")free.push(t);
+    else if(s==="busy"){const c=pc(t.s[day+per]);busy.push({name:t.n,subj:c.full,room:c.room,dept:t.d})}
+  });
+  
+  h+=`<div class="selected-banner"><div class="subj">${day}요일 ${per}교시</div><div class="meta">공강 ${free.length}명 · 수업중 ${busy.length}명</div></div>`;
+  
+  h+=`<div class="card"><div class="result-head"><div class="card-title" style="margin:0;color:#2e7d32">✅ 공강 교사</div><span class="badge green">${filterByDept(free).length}</span></div>`;
+  const counts={};
+  DEPTS.forEach(d=>{if(d==="전체")counts[d]=free.length;else counts[d]=free.filter(t=>t.d===d).length});
+  h+='<div class="dept-row">';
+  DEPTS.forEach(d=>{if(d==="전체"||counts[d]){h+=`<button class="dept-chip${DEPT_FILTER===d?' active':''}" onclick="setDeptFilter('${d}')">${d}<span class="cnt">${counts[d]}</span></button>`}});
+  h+='</div>';
+  const ff=filterByDept(free);
+  if(ff.length===0)h+='<div class="empty-state">해당 교과 공강 교사 없음</div>';
+  else{h+='<div class="chip-list">';ff.forEach(t=>{h+=`<span class="chip green-chip">${t.n}<span class="dept-tag">${t.d}</span></span>`});h+='</div>'}
+  h+='</div>';
+  
+  h+=`<div class="card"><div class="result-head"><div class="card-title" style="margin:0;color:#c62828">🔴 수업중</div><span class="badge red">${busy.length}</span></div>`;
+  if(busy.length>0){
+    h+='<div style="max-height:300px;overflow-y:auto">';
+    busy.forEach(b=>{h+=`<div class="impact-row"><div><span class="impact-name">${b.name}</span><span class="impact-dept">${b.dept}</span><div class="impact-details">${b.subj} · ${b.room}교실</div></div></div>`});
+    h+='</div>';
+  }
+  h+='</div>';
+  return h;
+}
+
+// ========== TAB: 공통 공강 ==========
+function renderCommonTab(){
+  let h='';
+  h+='<div class="card">';
+  h+='<div class="help-text">💡 여러 교사 선택 → <b>모두 공강인 시간</b> 찾기 (회의 일정 잡기 용)</div>';
+  h+=`<input class="search-input" placeholder="🔍 선생님 검색..." value="${SEARCH}" oninput="SEARCH=this.value;render()">`;
+  const counts=deptCounts();
+  h+='<div class="dept-row">';DEPTS.forEach(d=>{if(d!=="전체"&&!counts[d])return;h+=`<button class="dept-chip${DEPT_FILTER===d?' active':''}" onclick="setDeptFilter('${d}')">${d}<span class="cnt">${counts[d]||0}</span></button>`});h+='</div>';
+  
+  if(MULTI.length>0){
+    h+=`<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;padding:8px 12px;background:#e8f5e9;border-radius:10px;flex-wrap:wrap"><b style="color:#2e7d32;font-size:12px">선택 (${MULTI.length}명):</b>`;
+    MULTI.forEach(i=>{h+=`<span style="background:#fff;padding:3px 8px;border-radius:10px;font-size:11px;display:inline-flex;align-items:center;gap:3px">${T[i].n}<button onclick="toggleMulti(${i})" style="background:#c8e6c9;border:none;border-radius:8px;width:16px;height:16px;cursor:pointer;font-size:10px;display:inline-flex;align-items:center;justify-content:center">×</button></span>`});
+    h+=`<button class="btn btn-sec btn-sm" style="margin-left:auto;padding:3px 8px;min-height:24px" onclick="clearMulti()">전체해제</button></div>`;
+  }
+  
+  const filtered=filterByDept(T).filter(t=>!SEARCH||t.n.includes(SEARCH));
+  h+='<div class="pill-wrap" style="max-height:220px;overflow-y:auto">';
+  filtered.forEach(t=>{const i=T.indexOf(t);h+=`<button class="pill${MULTI.includes(i)?' multi-active':''}" onclick="toggleMulti(${i})">${t.n}</button>`});
+  h+='</div></div>';
+  
+  if(MULTI.length<2){h+='<div class="empty-state"><span class="emoji">👥</span>2명 이상 선택해주세요</div>';return h}
+  
+  const commonFree=[];
+  DAYS.forEach(d=>{PERIODS.forEach(p=>{let ok=true;for(const i of MULTI){if(gs(T[i],d,p)!=="free"){ok=false;break}}if(ok)commonFree.push({day:d,per:p})})});
+  
+  h+=`<div class="selected-banner"><div class="subj">${MULTI.length}명 공통 공강</div><div class="meta">총 ${commonFree.length}개 시간대</div></div>`;
+  if(commonFree.length===0){h+='<div class="card"><div class="empty-state"><span class="emoji">😔</span>공통 공강 시간이 없습니다</div></div>';return h}
+  
+  const byDay={};commonFree.forEach(c=>{if(!byDay[c.day])byDay[c.day]=[];byDay[c.day].push(c.per)});
+  h+='<div class="card"><div class="card-title">📅 요일별 공통 공강</div>';
+  DAYS.forEach(d=>{
+    if(!byDay[d])return;
+    h+=`<div style="display:flex;align-items:center;gap:6px;padding:8px 0;border-bottom:1px solid #f0f0f0"><b style="color:#1a237e;min-width:32px;font-size:13px">${d}</b><div style="display:flex;flex-wrap:wrap;gap:4px">`;
+    byDay[d].forEach(p=>{h+=`<span class="chip green-chip" style="padding:4px 10px">${p}교시</span>`});
+    h+='</div></div>';
+  });
+  h+='</div>';
+  
+  h+='<div class="card">';
+  h+='<div class="card-title">📊 시각화 (첫 번째 교사 기준)</div>';
+  const hl=new Set(commonFree.map(c=>c.day+c.per));
+  h+=renderTimetable(T[MULTI[0]],null,null,hl);
+  h+='</div>';
+  return h;
+}
+
+// ========== TAB: 우리반 ==========
+function renderMyClassTab(){
+  let h='';
+  const hr=T.find(t=>t.n==="박효덕");
+  h+=`<div class="class-badge"><h3>🎯 2학년 10반</h3><div class="sub">담임 ${hr?hr.n:"박효덕"} · 210교실 · 학생 ${Object.keys(CLASS_DATA.students).length}명</div></div>`;
+  
+  h+='<div class="segment">';
+  [["class","📋 반 시간표"],["student","👤 학생별"],["group","👥 선택과목"]].forEach(([id,lbl])=>{h+=`<button class="${VIEW_MODE===id?'active':''}" onclick="setViewMode('${id}')">${lbl}</button>`});
+  h+='</div>';
+  
+  if(VIEW_MODE==="class"){
+    h+='<div class="card">';
+    h+='<div class="help-text">🔵 파란 테두리: 담임 수업 · 🔶 이동수업: 과목별 인원 표시</div>';
+    const students=CLASS_DATA.students;
+    const firstSid=Object.keys(students)[0];
+    const firstS=students[firstSid].s;
+    
+    h+='<div class="tt-wrap"><table class="tt"><thead><tr><th>⏰</th>';
+    DAYS.forEach(d=>{h+=`<th>${d}</th>`});
+    h+='</tr></thead><tbody>';
+    PERIODS.forEach(pr=>{
+      h+=`<tr><td style="background:#f5f5f7;color:#86868b">${pr}</td>`;
+      DAYS.forEach(d=>{
+        const k=d+pr;
+        // is common?
+        let isCommon=true;
+        const fc=firstS[k]||"";
+        for(const sid of Object.keys(students)){if(students[sid].s[k]!==fc){isCommon=false;break}}
+        if(isCommon&&fc){
+          const parts=fc.split("|");const subj=parts[0];const teacher=parts[1]||"";const bg=gc(subj.split(" ")[0]);const isHr=teacher==="박효덕";
+          h+=`<td style="background:${bg}${isHr?';box-shadow:inset 0 0 0 2px #1a237e':''}"><div class="sn">${subj.split(" ")[0]}</div><div class="rm">${teacher}</div></td>`;
+        }else if(!fc){h+='<td class="empty"><span style="color:#d1d1d6;font-size:9px">·</span></td>'}
+        else{
+          const subjs={};
+          Object.values(students).forEach(s=>{const cell=s.s[k]||"";if(cell){const subj=cell.split("|")[0];subjs[subj]=(subjs[subj]||0)+1}});
+          const list=Object.entries(subjs).map(([s,c])=>`${s}(${c})`);
+          h+=`<td style="background:#fff3e0"><div class="sn" style="color:#e65100;font-size:9px">🚶 이동</div><div class="rm" style="font-size:7px;color:#bf360c;line-height:1.1;margin-top:1px">${list.slice(0,2).join("<br>")}${list.length>2?"<br>외 "+(list.length-2):""}</div></td>`;
+        }
+      });
+      h+='</tr>';
+    });
+    h+='</tbody></table></div>';
+    h+='</div>';
+  }else if(VIEW_MODE==="student"){
+    h+='<div class="card">';
+    h+='<div class="help-text">학생을 선택하면 <b>개인 시간표</b>가 나옵니다</div>';
+    h+='<div class="pill-wrap" style="max-height:180px;overflow-y:auto">';
+    Object.entries(CLASS_DATA.students).forEach(([sid,s])=>{
+      const active=SELECTED_STUDENT===sid;
+      h+=`<button class="pill${active?' active':''}" onclick="setStudent('${sid}')">${s.n}<span class="tag">${sid.slice(-2)}번</span></button>`;
+    });
+    h+='</div></div>';
+    if(SELECTED_STUDENT){
+      const st=CLASS_DATA.students[SELECTED_STUDENT];
+      h+='<div class="card">';
+      h+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap"><div style="font-size:16px;font-weight:700">${st.n}</div><div style="font-size:11px;color:#86868b">학번 ${SELECTED_STUDENT}</div><span class="dept-tag">${st.g}</span></div>`;
+      h+='<div class="tt-wrap"><table class="tt"><thead><tr><th>⏰</th>';
+      DAYS.forEach(d=>{h+=`<th>${d}</th>`});
+      h+='</tr></thead><tbody>';
+      PERIODS.forEach(pr=>{
+        h+=`<tr><td style="background:#f5f5f7;color:#86868b">${pr}</td>`;
+        DAYS.forEach(d=>{
+          const k=d+pr;const cell=st.s[k]||"";
+          if(!cell){h+='<td class="empty"><span style="color:#d1d1d6;font-size:9px">·</span></td>';return}
+          const parts=cell.split("|");const subj=parts[0];const teacher=parts[1]||"";const bg=gc(subj);const isHr=teacher==="박효덕";const isOpt=CLASS_DATA.optional_slots.includes(k);
+          let box='';if(isHr)box=';box-shadow:inset 0 0 0 2px #1a237e';else if(isOpt)box=';box-shadow:inset 0 0 0 2px #e65100';
+          h+=`<td style="background:${bg}${box}"><div class="sn">${subj}</div><div class="rm">${teacher}</div></td>`;
+        });
+        h+='</tr>';
+      });
+      h+='</tbody></table></div>';
+      h+='<div style="margin-top:8px;font-size:10px;color:#86868b">🔵 담임 수업 · 🔶 선택과목(이동)</div>';
+      h+='</div>';
+    }
+  }else if(VIEW_MODE==="group"){
+    h+='<div class="card">';
+    h+='<div class="help-text">같은 선택과목 조합 학생끼리 그룹화. 그룹 클릭시 상세 수업 교실·교사 확인</div>';
+    h+='<div style="display:flex;flex-direction:column;gap:6px">';
+    Object.entries(CLASS_DATA.groups).forEach(([gname,ginfo])=>{
+      const active=SELECTED_GROUP===gname;
+      h+=`<button onclick="setGroup('${gname}')" style="text-align:left;padding:12px 14px;border-radius:12px;border:${active?"2px solid #1a237e":"1px solid #e5e5ea"};background:${active?"#f0f4ff":"#fff"};cursor:pointer;font-family:inherit;font-size:13px"><div style="font-weight:700">${gname} <span style="color:#86868b;font-weight:400;font-size:11px">(${ginfo.students.length}명)</span></div><div style="color:#86868b;font-size:11px;margin-top:3px">${ginfo.students.map(s=>s.name).join(", ")}</div></button>`;
+    });
+    h+='</div></div>';
+    if(SELECTED_GROUP){
+      const g=CLASS_DATA.groups[SELECTED_GROUP];
+      h+=`<div class="card"><div class="card-title">【${SELECTED_GROUP}】 ${g.students.length}명</div>`;
+      h+='<div style="background:#f5f5f7;border-radius:10px;padding:10px"><div style="font-size:12px;font-weight:700;margin-bottom:6px">📚 선택과목</div>';
+      h+='<table style="width:100%;font-size:12px"><thead><tr><th style="text-align:left;padding:4px 6px;background:#1a237e;color:#fff;border-radius:4px 0 0 4px">시간</th><th style="text-align:left;padding:4px 6px;background:#1a237e;color:#fff">과목</th><th style="text-align:left;padding:4px 6px;background:#1a237e;color:#fff">교사</th><th style="padding:4px 6px;background:#1a237e;color:#fff;border-radius:0 4px 4px 0">교실</th></tr></thead><tbody>';
+      Object.entries(g.slots).forEach(([slot,subj])=>{
+        if(!subj)return;
+        let teacher="",room="";
+        for(const t of T){const cell=t.s[slot]||"";if(cell.includes(subj)){teacher=t.n;const p=cell.split("|");if(p[1])room=p[1];break}}
+        h+=`<tr style="border-bottom:1px solid #e5e5ea"><td style="padding:6px;font-weight:700">${slot}</td><td style="padding:6px">${subj}</td><td style="padding:6px">${teacher}</td><td style="padding:6px;text-align:center">${room||"-"}</td></tr>`;
+      });
+      h+='</tbody></table></div>';
+      h+='<div style="margin-top:10px"><div style="font-size:12px;font-weight:700;margin-bottom:6px">👥 소속 학생</div><div class="chip-list">';
+      g.students.forEach(s=>{h+=`<button class="chip" onclick="setStudent('${s.id}')">${s.name}</button>`});
+      h+='</div></div></div>';
+    }
+  }
+  
+  // Counsel time for homeroom teacher
+  if(hr){
+    const freeSlots=[];
+    DAYS.forEach(d=>{PERIODS.forEach(p=>{if(gs(hr,d,p)==="free")freeSlots.push(d+p+"교시")})});
+    const byDay={};freeSlots.forEach(f=>{const d=f[0];if(!byDay[d])byDay[d]=[];byDay[d].push(f.slice(1))});
+    h+='<div class="counsel-box"><h4>👨‍🏫 담임 상담 가능 시간</h4>';
+    if(Object.keys(byDay).length===0)h+='<div class="empty-state" style="padding:8px 0">공강 없음</div>';
+    else{
+      h+='<div style="display:flex;flex-direction:column;gap:4px;font-size:11px">';
+      DAYS.forEach(d=>{if(!byDay[d])return;h+=`<div><b style="color:#e65100;margin-right:6px">${d}요일:</b>${byDay[d].map(p=>`<span style="background:#ffe082;padding:2px 8px;border-radius:4px;margin-right:3px;font-weight:600">${p}</span>`).join("")}</div>`});
+      h+='</div>';
+    }
+    h+='</div>';
+  }
+  return h;
+}
+
+// ========== TAB: 교실 현황 ==========
+function renderRoomTab(){
+  let h='<div class="card"><div class="help-text">💡 교실을 선택하면 <b>주간 사용 현황</b> 확인</div>';
+  const rooms=new Set();
+  T.forEach(t=>{Object.values(t.s).forEach(v=>{if(v&&v!=="X"){const p=v.split("|");if(p[1])rooms.add(p[1])}})});
+  const sorted=[...rooms].sort((a,b)=>{const na=parseInt(a),nb=parseInt(b);if(!isNaN(na)&&!isNaN(nb))return na-nb;return a.localeCompare(b)});
+  h+='<div class="pill-wrap" style="max-height:180px;overflow-y:auto">';
+  sorted.forEach(r=>{h+=`<button class="pill${ROOM===r?' active':''}" onclick="setRoom('${r}')">${r}호</button>`});
+  h+='</div></div>';
+  
+  if(!ROOM){h+='<div class="empty-state"><span class="emoji">🏫</span>교실을 선택해주세요</div>';return h}
+  
+  const usage={};
+  T.forEach(t=>{Object.entries(t.s).forEach(([slot,v])=>{if(v&&v!=="X"){const p=v.split("|");if(p[1]===ROOM){if(!usage[slot])usage[slot]=[];usage[slot].push({teacher:t.n,subj:p[0].split(" ")[0],full:p[0]})}}})});
+  let used=0,free=0;
+  DAYS.forEach(d=>{PERIODS.forEach(p=>{if(usage[d+p])used++;else free++})});
+  h+=`<div class="selected-banner"><div class="subj">🏫 ${ROOM}호</div><div class="meta">사용 ${used}교시 · 비어있음 ${free}교시</div></div>`;
+  h+='<div class="card"><div class="card-title">📅 주간 현황</div>';
+  h+='<div class="tt-wrap"><table class="tt"><thead><tr><th>⏰</th>';DAYS.forEach(d=>{h+=`<th>${d}</th>`});h+='</tr></thead><tbody>';
+  PERIODS.forEach(pr=>{
+    h+=`<tr><td style="background:#f5f5f7;color:#86868b">${pr}</td>`;
+    DAYS.forEach(d=>{
+      const k=d+pr;const u=usage[k];
+      if(!u)h+=`<td style="background:#e8f5e9"><span style="color:#2e7d32;font-size:9px;font-weight:600">비어있음</span></td>`;
+      else{const f=u[0];h+=`<td style="background:${gc(f.subj)}"><div class="sn">${f.full}</div><div class="rm">${f.teacher}</div>${u.length>1?`<div style="font-size:7px;color:#c62828">+${u.length-1}명</div>`:""}</td>`}
+    });
+    h+='</tr>';
+  });
+  h+='</tbody></table></div></div>';
+  return h;
+}
+
+// ========== TAB: 근무 분석 ==========
+function calcStats(t){
+  let own=0,duty=0;const daily={"월":0,"화":0,"수":0,"목":0,"금":0};let maxC=0;
+  DAYS.forEach(d=>{let dc=0;PERIODS.forEach(p=>{const k=d+p;const v=t.s[k];if(!v||v==="X"){if(dc>maxC)maxC=dc;dc=0;return}const s=v.split("|")[0].split(" ")[0];if(s.includes("공강")||s.includes("진로"))duty++;else{own++;daily[d]++}dc++});if(dc>maxC)maxC=dc});
+  return{own,duty,total:t.h,free:35-own-duty,daily,maxC};
+}
+
+function renderAnalysisTab(){
+  let h='<div class="card"><div class="help-text">💡 교사별 주간 근무 통계 · 교과 필터 지원</div>';
+  const counts=deptCounts();
+  h+='<div class="dept-row">';DEPTS.forEach(d=>{if(d!=="전체"&&!counts[d])return;h+=`<button class="dept-chip${DEPT_FILTER===d?' active':''}" onclick="setDeptFilter('${d}')">${d}<span class="cnt">${counts[d]||0}</span></button>`});h+='</div>';
+  const filtered=filterByDept(T);
+  let totalH=0,maxC=0;filtered.forEach(t=>{const s=calcStats(t);totalH+=s.total;if(s.maxC>maxC)maxC=s.maxC});
+  const avg=filtered.length>0?(totalH/filtered.length).toFixed(1):0;
+  h+='<div class="stat-grid">';
+  h+=`<div class="stat-card"><div class="stat-num">${filtered.length}</div><div class="stat-lbl">교사</div></div>`;
+  h+=`<div class="stat-card"><div class="stat-num">${totalH}</div><div class="stat-lbl">총 시수</div></div>`;
+  h+=`<div class="stat-card"><div class="stat-num">${avg}</div><div class="stat-lbl">평균 시수</div></div>`;
+  h+=`<div class="stat-card"><div class="stat-num">${maxC}</div><div class="stat-lbl">최장 연강</div></div>`;
+  h+='</div></div>';
+  h+='<div class="card">';
+  h+='<div class="segment">';
+  [["hours","시수"],["consec","연강"],["free","공강"],["name","이름"]].forEach(([id,lbl])=>{h+=`<button class="${ANALYSIS_SORT===id?"active":""}" onclick="setAnalysisSort('${id}')">${lbl}</button>`});
+  h+='</div>';
+  const withS=filtered.map(t=>({t,s:calcStats(t)}));
+  if(ANALYSIS_SORT==="hours")withS.sort((a,b)=>b.s.total-a.s.total);
+  else if(ANALYSIS_SORT==="consec")withS.sort((a,b)=>b.s.maxC-a.s.maxC);
+  else if(ANALYSIS_SORT==="free")withS.sort((a,b)=>b.s.free-a.s.free);
+  else if(ANALYSIS_SORT==="name")withS.sort((a,b)=>a.t.n.localeCompare(b.t.n));
+  const maxH=Math.max(...withS.map(x=>x.s.total),1);
+  h+='<div>';
+  withS.forEach(({t,s})=>{
+    const pct=(s.total/maxH*100).toFixed(0);
+    h+=`<div class="tbar-row"><div><div class="tbar-name">${t.n}</div><div class="tbar-dept">${t.d}</div></div><div class="tbar-bar"><div class="tbar-fill" style="width:${pct}%"></div><span class="tbar-label">${s.total}h · 연강${s.maxC} · 공강${s.free}</span></div></div>`;
+  });
+  h+='</div></div>';
+  return h;
+}
+
+// ========== TAB: 히트맵 ==========
+function renderHeatmapTab(){
+  const grid={};
+  DAYS.forEach(d=>{PERIODS.forEach(p=>{grid[d+p]={busy:0,total:T.length}})});
+  T.forEach(t=>{DAYS.forEach(d=>{PERIODS.forEach(p=>{if(gs(t,d,p)==="busy")grid[d+p].busy++})})});
+  const max=Math.max(...Object.values(grid).map(v=>v.busy));
+  const min=Math.min(...Object.values(grid).map(v=>v.busy));
+  function hc(b){if(b===0)return"#f5f5f7";const pct=(b-min)/(max-min||1);if(pct<0.25)return"#e3f2fd";if(pct<0.5)return"#90caf9";if(pct<0.7)return"#ffb74d";if(pct<0.85)return"#ff7043";return"#c62828"}
+  function ht(b){const pct=(b-min)/(max-min||1);return pct>0.6?"#fff":"#1d1d1f"}
+  let h='<div class="card"><div class="help-text">💡 요일·교시별 수업 밀도. 진할수록 수업 많음. 셀 <b>클릭 → 공강 탭으로 이동</b></div>';
+  h+='<div class="heat-legend"><span>적음</span>';["#f5f5f7","#e3f2fd","#90caf9","#ffb74d","#ff7043","#c62828"].forEach(c=>{h+=`<span class="legend-box" style="background:${c}"></span>`});h+=`<span>많음</span><span style="margin-left:auto"><b>최대</b> ${max}명</span></div>`;
+  h+='<div class="heatmap">';
+  h+='<div class="heat-cell hdr">⏰</div>';DAYS.forEach(d=>{h+=`<div class="heat-cell hdr">${d}</div>`});
+  PERIODS.forEach(p=>{
+    h+=`<div class="heat-cell rowhdr">${p}</div>`;
+    DAYS.forEach(d=>{const info=grid[d+p];const bg=hc(info.busy);const col=ht(info.busy);const pct=Math.round(info.busy/info.total*100);h+=`<div class="heat-cell" style="background:${bg};color:${col}" onclick="setTab('find');DP='${d+p}';render()"><div>${info.busy}</div><div class="heat-pct">${pct}%</div></div>`});
+  });
+  h+='</div></div>';
+  const pt={};PERIODS.forEach(p=>{pt[p]=DAYS.reduce((s,d)=>s+grid[d+p].busy,0)});
+  const peakP=Object.entries(pt).sort((a,b)=>b[1]-a[1])[0];
+  const dt={};DAYS.forEach(d=>{dt[d]=PERIODS.reduce((s,p)=>s+grid[d+p].busy,0)});
+  const peakD=Object.entries(dt).sort((a,b)=>b[1]-a[1])[0];
+  h+=`<div class="card"><div class="card-title">📊 분석 요약</div><div style="font-size:12px;line-height:1.8;color:#424245">• 가장 바쁜 교시: <b>${peakP[0]}교시</b> (${peakP[1]}개 수업)<br>• 가장 바쁜 요일: <b>${peakD[0]}요일</b> (${peakD[1]}개 수업)</div></div>`;
+  return h;
+}
+
+// ========== TAB: 행사 ==========
+function renderEventTab(){
+  let h='<div class="card">';
+  h+='<div class="help-text">💡 시험·행사로 빠지는 시간 선택 → <b>교사별 시수 손실</b> 자동 계산</div>';
+  h+='<div class="card-title">📅 행사 요일</div>';
+  h+='<div class="event-grid">';
+  DAYS.forEach(d=>{h+=`<button class="event-btn${EVENT_DAYS.includes(d)?" active":""}" onclick="toggleEventDay('${d}')">${d}</button>`});
+  h+='</div>';
+  h+='<div class="card-title">⏰ 행사 교시</div>';
+  h+='<div class="period-grid">';
+  PERIODS.forEach(p=>{h+=`<button class="event-btn${EVENT_PERIODS.includes(p)?" active":""}" onclick="toggleEventPeriod(${p})">${p}</button>`});
+  h+='</div>';
+  h+='<div class="qa-row">';
+  h+='<button class="qa-btn" onclick="EVENT_DAYS=[...DAYS];render()">전요일</button>';
+  h+='<button class="qa-btn" onclick="EVENT_PERIODS=[...PERIODS];render()">전교시</button>';
+  h+='<button class="qa-btn" onclick="EVENT_PERIODS=[1,2,3,4];render()">오전</button>';
+  h+='<button class="qa-btn" onclick="EVENT_PERIODS=[5,6,7];render()">오후</button>';
+  h+='<button class="qa-btn" onclick="clearEvent()">초기화</button>';
+  h+='</div></div>';
+  if(EVENT_DAYS.length===0||EVENT_PERIODS.length===0){h+='<div class="empty-state"><span class="emoji">👆</span>요일과 교시를 선택해주세요</div>';return h}
+  const slots=[];EVENT_DAYS.forEach(d=>EVENT_PERIODS.forEach(p=>slots.push(d+p)));
+  const impact={};
+  T.forEach(t=>{let lost=0;const det=[];slots.forEach(k=>{const v=t.s[k];if(v&&v!=="X"){const s=v.split("|")[0].split(" ")[0];if(!s.includes("공강")&&!s.includes("진로")){lost++;det.push(k+" "+v.split("|")[0])}}});if(lost>0)impact[t.n]={teacher:t,lost,details:det}});
+  const sorted=Object.values(impact).sort((a,b)=>b.lost-a.lost);
+  const total=sorted.reduce((s,x)=>s+x.lost,0);
+  h+=`<div class="selected-banner" style="background:linear-gradient(135deg,#e65100 0%,#f57c00 100%)"><div class="subj">📉 영향 요약</div><div class="meta">${EVENT_DAYS.join("·")} 요일 × ${EVENT_PERIODS.join("·")}교시 · ${slots.length}개 슬롯<br>취소 ${total}개 수업 · ${sorted.length}명 교사 영향</div></div>`;
+  if(sorted.length===0){h+='<div class="card"><div class="empty-state">영향받는 수업이 없습니다</div></div>';return h}
+  h+=`<div class="card"><div class="card-title">👨‍🏫 교사별 시수 손실 (${sorted.length}명)</div>`;
+  sorted.forEach(x=>{h+=`<div class="impact-row"><div><span class="impact-name">${x.teacher.n}</span><span class="impact-dept">${x.teacher.d}</span><div class="impact-details">${x.details.slice(0,2).join(", ")}${x.details.length>2?" 외 "+(x.details.length-2)+"개":""}</div></div><div class="impact-lost">-${x.lost}</div></div>`});
+  h+='</div>';
+  return h;
+}
+
+// ========== TAB: 시간표 보기 ==========
+function renderViewTab(){
+  let h='<div class="card"><div class="help-text">💡 선생님 선택 → 주간 시간표 조회</div>';
+  h+=renderSearchAndTeachers('setMe',ME);
+  h+='</div>';
+  if(ME!==null){
+    const t=T[ME];
+    h+=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div><div style="font-size:15px;font-weight:700">${t.n}${deptTag(t)}</div><div style="font-size:11px;color:#86868b">${t.h}시수</div></div></div>`;
+    h+=renderTimetable(t,null,null,null);
+    h+='</div>';
+  }
+  return h;
+}
+
+// ========== Main Render ==========
+function render(){
+  const app=document.getElementById('app');
+  let h=renderTopbar();
+  h+='<div class="content">';
+  if(TAB==="swap")h+=renderSwapTab();
+  else if(TAB==="find")h+=renderFindTab();
+  else if(TAB==="common")h+=renderCommonTab();
+  else if(TAB==="myclass")h+=renderMyClassTab();
+  else if(TAB==="room")h+=renderRoomTab();
+  else if(TAB==="analysis")h+=renderAnalysisTab();
+  else if(TAB==="heatmap")h+=renderHeatmapTab();
+  else if(TAB==="event")h+=renderEventTab();
+  else if(TAB==="view")h+=renderViewTab();
+  h+='</div>';
+  h+=renderBottomNav();
+  app.innerHTML=h;
+  
+  // More menu
+  const mm=document.getElementById('moreMenu');
+  mm.innerHTML=renderMoreMenu();
+  mm.classList.toggle('open',MORE_OPEN);
+}
+
+// Close more menu when clicking outside
+document.addEventListener('click',(e)=>{
+  if(MORE_OPEN&&!e.target.closest('.more-menu')&&!e.target.closest('.topbar-btn')&&!e.target.closest('.nav-item:last-child')){MORE_OPEN=false;render()}
+});
+
+render();
+
+// PWA install prompt
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt',(e)=>{
+  e.preventDefault();deferredPrompt=e;
+  if(localStorage.getItem('pwa-installed')||localStorage.getItem('pwa-dismissed'))return;
+  setTimeout(()=>{
+    const banner=document.createElement('div');banner.className='install-prompt show';
+    banner.innerHTML='<span style="flex:1;font-size:13px">📱 홈화면에 앱으로 설치</span><button class="primary" id="pwaInstall">설치</button><button class="close" id="pwaClose">✕</button>';
+    document.body.appendChild(banner);
+    document.getElementById('pwaInstall').onclick=async()=>{if(deferredPrompt){deferredPrompt.prompt();const{outcome}=await deferredPrompt.userChoice;if(outcome==='accepted')localStorage.setItem('pwa-installed','1');deferredPrompt=null}banner.remove()};
+    document.getElementById('pwaClose').onclick=()=>{localStorage.setItem('pwa-dismissed','1');banner.remove()};
+  },3000);
+});
+</script>
+</body>
+</html>
