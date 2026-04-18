@@ -929,7 +929,6 @@ const NAV_PRIMARY=[
   {id:"analysis",icon:"📊",label:"분석"}
 ];
 const NAV_MORE=[
-  {id:"night",icon:"🌙",label:"야자 감독"},
   {id:"records",icon:"📝",label:"교체/대강 기록"},
   {id:"common",icon:"👥",label:"공통 공강"},
   {id:"room",icon:"🏫",label:"교실 현황"},
@@ -996,7 +995,7 @@ function deptCounts(){const c={"전체":T.length};T.forEach(t=>{c[t.d]=(c[t.d]||
 
 // ========== Renderers ==========
 function renderTopbar(){
-  let tabInfo={swap:{t:"수업 교체",s:"내 수업을 다른 교사와 바꾸거나 대강 찾기"},find:{t:"시간별 공강",s:"특정 시간 공강 교사 찾기"},common:{t:"공통 공강",s:"여러 교사 동시 공강 시간"},myclass:{t:"우리반",s:"학급 시간표 조회"},room:{t:"교실 현황",s:"교실별 사용 현황"},analysis:{t:"근무 분석",s:"교사별 시수·연강 통계"},heatmap:{t:"수업 밀도",s:"시간대별 수업량 분포"},event:{t:"행사 계산",s:"시험/행사 시수 변동 계산"},view:{t:"시간표 조회",s:"개별 교사 시간표"},records:{t:"교체/대강 기록",s:"날짜별 변경사항 관리"},admin:{t:"👑 관리자",s:"사용자 계정 관리"},night:{t:"🌙 야자 감독",s:"주간 감독표 조회 및 교체"}};
+  let tabInfo={swap:{t:"수업 교체",s:"내 수업을 다른 교사와 바꾸거나 대강 찾기"},find:{t:"시간별 공강",s:"특정 시간 공강 교사 찾기"},common:{t:"공통 공강",s:"여러 교사 동시 공강 시간"},myclass:{t:"우리반",s:"학급 시간표 조회"},room:{t:"교실 현황",s:"교실별 사용 현황"},heatmap:{t:"수업 밀도",s:"시간대별 수업량 분포"},event:{t:"행사 계산",s:"시험/행사 시수 변동 계산"},view:{t:"시간표 조회",s:"개별 교사 시간표"},records:{t:"교체/대강 기록",s:"날짜별 변경사항 관리"},admin:{t:"👑 관리자",s:"사용자 계정 관리"},night:{t:"🌙 야자 감독",s:"주간 감독표 조회 및 교체"}};
   const info=tabInfo[TAB]||{t:"교무도우미",s:""};
   const userBadge = CURRENT_USER && CURRENT_USER.teacherName 
     ? `<span style="background:#1a237e;color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;margin-right:4px">${CURRENT_USER.teacherName}</span>`
@@ -1133,6 +1132,11 @@ function renderTimetableWithChanges(teacher,onCellClick,selectedKey,changes){
 
 // ========== TAB: 수업 교체 ==========
 function renderSwapTab(){
+  // Auto-set ME to current user's teacher if not yet chosen
+  if(ME === null && CURRENT_USER && CURRENT_USER.teacherName){
+    const myIdx = T.findIndex(t => t.n === CURRENT_USER.teacherName);
+    if(myIdx >= 0) ME = myIdx;
+  }
   let h='';
   // Week-based date selector
   const weekStart = getWeekStart(VIEW_DATE);
@@ -1150,7 +1154,7 @@ function renderSwapTab(){
   h+='</div></div>';
   
   if(ME===null){
-    h+='<div class="card"><div class="help-text">💡 <b>본인 선생님 선택 → 교체할 수업 칸 클릭</b></div>';
+    h+='<div class="card"><div class="help-text">💡 <b>교체 기준이 될 선생님 선택 → 수업 칸 클릭</b></div>';
     h+=renderSearchAndTeachers('setMe',null);
     h+='</div>';
     return h;
@@ -1158,7 +1162,8 @@ function renderSwapTab(){
   const myT_orig=T[ME];
   const {teacher: myT, changes: myChanges} = getTeacherWithOverrides(myT_orig, weekStart);
   h+=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div><div style="font-size:15px;font-weight:700">${myT.n}${deptTag(myT)}</div><div style="font-size:11px;color:#86868b;margin-top:2px">${myT.h}시수</div></div>`;
-  h+=`<button class="btn btn-sec btn-sm" onclick="ME=null;SEL=null;render()">변경</button></div>`;
+  const isMyself = CURRENT_USER && CURRENT_USER.teacherName === myT.n;
+  h+=`<button class="btn btn-sec btn-sm" onclick="ME=null;SEL=null;render()">${isMyself?'다른 교사':'변경'}</button></div>`;
   h+=renderTimetableWithChanges(myT,'setSel',SEL,myChanges);
   h+='</div>';
 
@@ -1971,37 +1976,6 @@ function calcStats(t){
   return{own,duty,total:t.h,free:35-own-duty,daily,maxC};
 }
 
-function renderAnalysisTab(){
-  let h='<div class="card"><div class="help-text">💡 교사별 주간 근무 통계 · 교과 필터 지원</div>';
-  const counts=deptCounts();
-  h+='<div class="dept-row">';DEPTS.forEach(d=>{if(d!=="전체"&&!counts[d])return;h+=`<button class="dept-chip${DEPT_FILTER===d?' active':''}" onclick="setDeptFilter('${d}')">${d}<span class="cnt">${counts[d]||0}</span></button>`});h+='</div>';
-  const filtered=filterByDept(T);
-  let totalH=0,maxC=0;filtered.forEach(t=>{const s=calcStats(t);totalH+=s.total;if(s.maxC>maxC)maxC=s.maxC});
-  const avg=filtered.length>0?(totalH/filtered.length).toFixed(1):0;
-  h+='<div class="stat-grid">';
-  h+=`<div class="stat-card"><div class="stat-num">${filtered.length}</div><div class="stat-lbl">교사</div></div>`;
-  h+=`<div class="stat-card"><div class="stat-num">${totalH}</div><div class="stat-lbl">총 시수</div></div>`;
-  h+=`<div class="stat-card"><div class="stat-num">${avg}</div><div class="stat-lbl">평균 시수</div></div>`;
-  h+=`<div class="stat-card"><div class="stat-num">${maxC}</div><div class="stat-lbl">최장 연강</div></div>`;
-  h+='</div></div>';
-  h+='<div class="card">';
-  h+='<div class="segment">';
-  [["hours","시수"],["consec","연강"],["free","공강"],["name","이름"]].forEach(([id,lbl])=>{h+=`<button class="${ANALYSIS_SORT===id?"active":""}" onclick="setAnalysisSort('${id}')">${lbl}</button>`});
-  h+='</div>';
-  const withS=filtered.map(t=>({t,s:calcStats(t)}));
-  if(ANALYSIS_SORT==="hours")withS.sort((a,b)=>b.s.total-a.s.total);
-  else if(ANALYSIS_SORT==="consec")withS.sort((a,b)=>b.s.maxC-a.s.maxC);
-  else if(ANALYSIS_SORT==="free")withS.sort((a,b)=>b.s.free-a.s.free);
-  else if(ANALYSIS_SORT==="name")withS.sort((a,b)=>a.t.n.localeCompare(b.t.n));
-  const maxH=Math.max(...withS.map(x=>x.s.total),1);
-  h+='<div>';
-  withS.forEach(({t,s})=>{
-    const pct=(s.total/maxH*100).toFixed(0);
-    h+=`<div class="tbar-row"><div><div class="tbar-name">${t.n}</div><div class="tbar-dept">${t.d}</div></div><div class="tbar-bar"><div class="tbar-fill" style="width:${pct}%"></div><span class="tbar-label">${s.total}h · 연강${s.maxC} · 공강${s.free}</span></div></div>`;
-  });
-  h+='</div></div>';
-  return h;
-}
 
 // ========== TAB: 히트맵 ==========
 function renderHeatmapTab(){
@@ -3134,7 +3108,6 @@ function render(){
   else if(TAB==="common")h+=renderCommonTab();
   else if(TAB==="myclass")h+=renderMyClassTab();
   else if(TAB==="room")h+=renderRoomTab();
-  else if(TAB==="analysis")h+=renderAnalysisTab();
   else if(TAB==="heatmap")h+=renderHeatmapTab();
   else if(TAB==="event")h+=renderEventTab();
   else if(TAB==="view")h+=renderViewTab();
