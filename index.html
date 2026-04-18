@@ -228,10 +228,37 @@ table.tt{border-collapse:separate;border-spacing:2px;width:100%;table-layout:fix
 .install-prompt button{border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:600}
 .install-prompt .primary{background:#fff;color:#1a237e}
 .install-prompt .close{background:transparent;color:#fff;opacity:.7;padding:4px 8px}
+
+/* Auth screen */
+.auth-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;padding:24px;background:linear-gradient(135deg,#f0f4ff 0%,#e8eaf6 100%);max-width:560px;margin:0 auto}
+.auth-logo{font-size:48px;margin-bottom:16px}
+.auth-title{font-size:26px;font-weight:800;color:#1a237e;letter-spacing:-.5px;margin-bottom:4px}
+.auth-subtitle{font-size:13px;color:#86868b;margin-bottom:32px;text-align:center}
+.auth-card{background:#fff;border-radius:20px;padding:24px;box-shadow:0 4px 20px rgba(0,0,0,.08);width:100%;max-width:380px}
+.auth-input{width:100%;padding:14px 16px;border-radius:12px;border:1.5px solid #e5e5ea;font-size:15px;font-family:inherit;background:#f5f5f7;color:#1d1d1f;margin-bottom:10px;transition:all .15s}
+.auth-input:focus{outline:none;border-color:#1a237e;background:#fff}
+.auth-btn{width:100%;padding:14px;border:none;border-radius:12px;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;background:#1a237e;color:#fff;margin-top:8px;min-height:48px;transition:all .15s}
+.auth-btn:active{transform:scale(.98);opacity:.9}
+.auth-btn:disabled{opacity:.5;cursor:not-allowed}
+.auth-btn-secondary{background:transparent;color:#1a237e;margin-top:10px;padding:8px;font-size:13px;font-weight:600}
+.auth-switch{text-align:center;font-size:12px;color:#86868b;margin-top:16px}
+.auth-switch a{color:#1a237e;font-weight:700;cursor:pointer;text-decoration:underline}
+.auth-error{background:#ffebee;color:#c62828;padding:10px 12px;border-radius:8px;font-size:12px;margin-bottom:10px;line-height:1.4}
+.auth-success{background:#e8f5e9;color:#1b5e20;padding:10px 12px;border-radius:8px;font-size:12px;margin-bottom:10px;line-height:1.4}
+
+/* Profile sheet */
+.profile-card{background:#fff;border:1px solid #e5e5ea;border-radius:12px;padding:14px;margin-bottom:10px}
+.profile-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f0f0f0}
+.profile-row:last-child{border-bottom:none}
+.profile-label{font-size:12px;color:#86868b;font-weight:500}
+.profile-value{font-size:13px;color:#1d1d1f;font-weight:600}
+.teacher-select-pill{padding:6px 12px;border-radius:14px;border:1px solid #e5e5ea;background:#fff;cursor:pointer;font-size:12px;font-family:inherit;color:#1d1d1f;white-space:nowrap;flex-shrink:0;min-height:30px;display:inline-flex;align-items:center;gap:3px;font-weight:500}
+.teacher-select-pill.active{background:#1a237e;color:#fff;border-color:#1a237e;font-weight:700}
 </style>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, push, onValue, set, remove, get, child } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDzBnbUtsGSdKqFsML9BbEA8iI3syY1MFg",
@@ -245,16 +272,24 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
+const auth = getAuth(app);
 
 // Expose to window for non-module scripts
 window.fb = {
-  db,
+  db, auth,
   ref: (path) => ref(db, path),
   push: (path, data) => push(ref(db, path), data),
   set: (path, data) => set(ref(db, path), data),
   remove: (path) => remove(ref(db, path)),
   get: (path) => get(ref(db, path)),
-  onValue: (path, callback) => onValue(ref(db, path), callback)
+  onValue: (path, callback) => onValue(ref(db, path), callback),
+  // Auth methods
+  signUp: (email, password) => createUserWithEmailAndPassword(auth, email, password),
+  signIn: (email, password) => signInWithEmailAndPassword(auth, email, password),
+  signOut: () => signOut(auth),
+  onAuthChange: (callback) => onAuthStateChanged(auth, callback),
+  resetPassword: (email) => sendPasswordResetEmail(auth, email),
+  currentUser: () => auth.currentUser
 };
 
 // Dispatch ready event
@@ -298,6 +333,12 @@ let MORE_OPEN=false;
 let RECORDS = {};  // {date: {id: record}}
 let VIEW_DATE = new Date().toISOString().slice(0,10); // YYYY-MM-DD
 let FB_READY = false;
+
+// Auth state
+let CURRENT_USER = null; // {uid, email, teacherName}
+let AUTH_MODE = "signin"; // "signin" | "signup" | "reset"
+let AUTH_CHECKING = true; // true until we know auth state
+let AUTH_ERROR = "";
 
 // Helpers for date
 function todayStr(){return new Date().toISOString().slice(0,10)}
@@ -400,11 +441,150 @@ function setupFirebase(){
     return;
   }
   FB_READY = true;
-  // Listen for record changes
-  window.fb.onValue("overrides", (snapshot) => {
-    const data = snapshot.val() || {};
-    RECORDS = data;
+  
+  // Listen for auth state changes
+  window.fb.onAuthChange(async (user) => {
+    AUTH_CHECKING = false;
+    if(user){
+      // User is signed in, load their profile
+      try {
+        const snap = await window.fb.get(`users/${user.uid}`);
+        const profile = snap.val() || {};
+        CURRENT_USER = {
+          uid: user.uid,
+          email: user.email,
+          teacherName: profile.teacherName || null
+        };
+      } catch(e) {
+        CURRENT_USER = {uid: user.uid, email: user.email, teacherName: null};
+      }
+      // Listen for record changes (only when logged in)
+      window.fb.onValue("overrides", (snapshot) => {
+        const data = snapshot.val() || {};
+        RECORDS = data;
+        render();
+      });
+    } else {
+      CURRENT_USER = null;
+      RECORDS = {};
+    }
     render();
+  });
+}
+
+// Auth helper functions
+async function handleSignUp(email, password){
+  AUTH_ERROR = "";
+  if(password.length < 6){AUTH_ERROR="비밀번호는 6자 이상이어야 합니다";render();return}
+  try{
+    await window.fb.signUp(email, password);
+    // Auth state change will trigger render with new user
+  }catch(e){
+    AUTH_ERROR = translateAuthError(e);
+    render();
+  }
+}
+
+async function handleSignIn(email, password){
+  AUTH_ERROR = "";
+  try{
+    await window.fb.signIn(email, password);
+  }catch(e){
+    AUTH_ERROR = translateAuthError(e);
+    render();
+  }
+}
+
+async function handleSignOut(){
+  if(!confirm("로그아웃 하시겠습니까?"))return;
+  try{
+    await window.fb.signOut();
+    closeSheet();
+  }catch(e){
+    alert("로그아웃 실패: "+e.message);
+  }
+}
+
+async function handleResetPassword(email){
+  AUTH_ERROR = "";
+  if(!email){AUTH_ERROR="이메일을 입력하세요";render();return}
+  try{
+    await window.fb.resetPassword(email);
+    AUTH_ERROR = "";
+    alert("비밀번호 재설정 메일을 보냈습니다.\n이메일을 확인해주세요.");
+    AUTH_MODE = "signin";
+    render();
+  }catch(e){
+    AUTH_ERROR = translateAuthError(e);
+    render();
+  }
+}
+
+async function saveProfile(teacherName){
+  if(!CURRENT_USER) return;
+  try{
+    await window.fb.set(`users/${CURRENT_USER.uid}`, {
+      teacherName,
+      email: CURRENT_USER.email,
+      updatedAt: new Date().toISOString()
+    });
+    CURRENT_USER.teacherName = teacherName;
+    closeSheet();
+    render();
+  }catch(e){
+    alert("저장 실패: "+e.message);
+  }
+}
+
+function translateAuthError(e){
+  const code = e.code || "";
+  if(code.includes("email-already-in-use")) return "이미 가입된 이메일입니다";
+  if(code.includes("invalid-email")) return "올바른 이메일 형식이 아닙니다";
+  if(code.includes("weak-password")) return "비밀번호가 너무 약합니다 (6자 이상)";
+  if(code.includes("user-not-found")) return "가입되지 않은 이메일입니다";
+  if(code.includes("wrong-password")) return "비밀번호가 올바르지 않습니다";
+  if(code.includes("invalid-credential")) return "이메일 또는 비밀번호가 올바르지 않습니다";
+  if(code.includes("too-many-requests")) return "너무 많은 시도가 있었습니다. 잠시 후 다시 시도해주세요";
+  if(code.includes("network-request-failed")) return "네트워크 오류가 발생했습니다";
+  return e.message || "로그인 실패";
+}
+
+// Show profile sheet (for setting teacher name)
+function showProfileSheet(){
+  if(!CURRENT_USER){
+    alert("로그인이 필요합니다");return;
+  }
+  const myName = CURRENT_USER.teacherName;
+  let body = '';
+  body += `<div class="profile-card">`;
+  body += `<div class="profile-row"><span class="profile-label">📧 이메일</span><span class="profile-value">${CURRENT_USER.email}</span></div>`;
+  body += `<div class="profile-row"><span class="profile-label">👤 교사 이름</span><span class="profile-value">${myName || "<span style=\"color:#c62828\">미설정</span>"}</span></div>`;
+  body += `</div>`;
+  
+  body += '<div style="margin-bottom:14px">';
+  body += '<div style="font-size:13px;font-weight:700;margin-bottom:8px">본인 이름 선택</div>';
+  body += '<input type="text" id="teacherSearch" class="auth-input" placeholder="🔍 이름 검색..." oninput="filterTeacherList(this.value)" style="margin-bottom:8px">';
+  body += '<div id="teacherPillList" style="display:flex;flex-wrap:wrap;gap:5px;max-height:260px;overflow-y:auto;padding:4px">';
+  T.forEach(t=>{
+    const active = t.n === myName;
+    body += `<button class="teacher-select-pill${active?" active":""}" data-tname="${t.n}" onclick="saveProfile('${t.n}')">${t.n}<span style="font-size:10px;opacity:.7;margin-left:2px">${t.d}</span></button>`;
+  });
+  body += '</div></div>';
+  
+  body += '<button class="auth-btn" onclick="handleSignOut()" style="background:#c62828">🚪 로그아웃</button>';
+  body += '<div style="font-size:10px;color:#86868b;text-align:center;margin-top:8px">이름을 선택하면 자동으로 저장됩니다</div>';
+  
+  openSheet('👤 내 프로필', body);
+}
+
+// Filter teacher list in profile sheet
+function filterTeacherList(q){
+  const list = document.getElementById('teacherPillList');
+  if(!list)return;
+  const query = q.toLowerCase();
+  list.querySelectorAll('.teacher-select-pill').forEach(el=>{
+    const name = el.getAttribute('data-tname').toLowerCase();
+    el.style.display = name.includes(query) ? "" : "none";
   });
 }
 
@@ -413,11 +593,18 @@ function saveRecord(record, weekStart){
     alert("Firebase 연결 대기중입니다. 잠시 후 다시 시도해주세요.");
     return Promise.reject();
   }
+  if(!CURRENT_USER){
+    alert("로그인이 필요합니다");
+    return Promise.reject();
+  }
   const wk = weekStart || record.week || getWeekStart(todayStr());
   return window.fb.push(`overrides/${wk}`, {
     ...record,
     storedAt: wk,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    createdByUid: CURRENT_USER.uid,
+    createdByEmail: CURRENT_USER.email,
+    createdByName: CURRENT_USER.teacherName || CURRENT_USER.email
   });
 }
 
@@ -506,7 +693,10 @@ function deptCounts(){const c={"전체":T.length};T.forEach(t=>{c[t.d]=(c[t.d]||
 function renderTopbar(){
   let tabInfo={swap:{t:"수업 교체",s:"내 수업을 다른 교사와 바꾸거나 대강 찾기"},find:{t:"시간별 공강",s:"특정 시간 공강 교사 찾기"},common:{t:"공통 공강",s:"여러 교사 동시 공강 시간"},myclass:{t:"우리반",s:"2학년 10반 관리"},room:{t:"교실 현황",s:"교실별 사용 현황"},analysis:{t:"근무 분석",s:"교사별 시수·연강 통계"},heatmap:{t:"수업 밀도",s:"시간대별 수업량 분포"},event:{t:"행사 계산",s:"시험/행사 시수 변동 계산"},view:{t:"시간표 조회",s:"개별 교사 시간표"},records:{t:"교체/대강 기록",s:"날짜별 변경사항 관리"}};
   const info=tabInfo[TAB]||{t:"교무도우미",s:""};
-  return `<div class="topbar"><div class="topbar-content"><div><div class="topbar-title">${info.t}</div><div class="topbar-sub">${info.s}</div></div><button class="topbar-btn" onclick="toggleMore()">⋯</button></div></div>`;
+  const userBadge = CURRENT_USER && CURRENT_USER.teacherName 
+    ? `<span style="background:#1a237e;color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;margin-right:4px">${CURRENT_USER.teacherName}</span>`
+    : (CURRENT_USER ? '<span style="background:#c62828;color:#fff;font-size:9px;padding:2px 6px;border-radius:10px;font-weight:700;margin-right:4px">이름설정</span>' : '');
+  return `<div class="topbar"><div class="topbar-content"><div><div class="topbar-title">${info.t}</div><div class="topbar-sub">${info.s}</div></div><div style="display:flex;align-items:center;gap:2px">${userBadge}<button class="topbar-btn" onclick="showProfileSheet()" title="프로필">👤</button><button class="topbar-btn" onclick="toggleMore()">⋯</button></div></div></div>`;
 }
 
 function renderBottomNav(){
@@ -1646,7 +1836,8 @@ function renderRecordsTab(){
     h+=`<div><div style="font-size:14px;font-weight:700;color:${borderColor}">${icon} ${label}${isCross?' <span style="font-size:10px;background:#ffecb3;color:#e65100;padding:1px 6px;border-radius:8px;margin-left:4px">다른 주 교체</span>':''}</div>`;
     if(rec.createdAt){
       const t = new Date(rec.createdAt);
-      h+=`<div style="font-size:10px;color:#86868b;margin-top:2px">${t.toLocaleString('ko-KR',{hour12:false})}${rec.createdBy?" · "+rec.createdBy:""}</div>`;
+      const creatorName = rec.createdByName || rec.createdBy || "";
+      h+=`<div style="font-size:10px;color:#86868b;margin-top:2px">${t.toLocaleString('ko-KR',{hour12:false})}${creatorName?" · "+creatorName:""}</div>`;
     }
     h+='</div>';
     h+=`<button onclick="confirmDeleteRecord('${weekStart}','${id}', ${JSON.stringify(rec).replace(/'/g,"&#39;").replace(/"/g,"&quot;").length > 0 ? "true" : "false"})" style="background:#fff;border:1px solid #e5e5ea;color:#c62828;padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit">삭제</button>`;
@@ -1712,7 +1903,83 @@ function confirmDeleteRecord(weekStart, id){
 }
 
 // ========== Main Render ==========
+function renderAuthScreen(){
+  const app = document.getElementById('app');
+  let h = '<div class="auth-screen">';
+  h += '<div class="auth-logo">🏫</div>';
+  h += '<div class="auth-title">통영고 교무 도우미</div>';
+  h += '<div class="auth-subtitle">';
+  if(AUTH_MODE === "signin") h += '선생님 계정으로 로그인해주세요';
+  else if(AUTH_MODE === "signup") h += '새 계정 만들기';
+  else h += '비밀번호 재설정';
+  h += '</div>';
+  
+  h += '<div class="auth-card">';
+  if(AUTH_ERROR) h += `<div class="auth-error">⚠️ ${AUTH_ERROR}</div>`;
+  
+  if(AUTH_MODE === "signin"){
+    h += '<input type="email" id="authEmail" class="auth-input" placeholder="이메일" autocomplete="email" inputmode="email">';
+    h += '<input type="password" id="authPassword" class="auth-input" placeholder="비밀번호" autocomplete="current-password">';
+    h += '<button class="auth-btn" onclick="submitSignIn()">로그인</button>';
+    h += '<button class="auth-btn auth-btn-secondary" onclick="AUTH_MODE=\'reset\';AUTH_ERROR=\'\';render()">비밀번호를 잊어버리셨나요?</button>';
+    h += '<div class="auth-switch">계정이 없으신가요? <a onclick="AUTH_MODE=\'signup\';AUTH_ERROR=\'\';render()">가입하기</a></div>';
+  } else if(AUTH_MODE === "signup"){
+    h += '<input type="email" id="authEmail" class="auth-input" placeholder="이메일" autocomplete="email" inputmode="email">';
+    h += '<input type="password" id="authPassword" class="auth-input" placeholder="비밀번호 (6자 이상)" autocomplete="new-password">';
+    h += '<input type="password" id="authPassword2" class="auth-input" placeholder="비밀번호 확인" autocomplete="new-password">';
+    h += '<button class="auth-btn" onclick="submitSignUp()">가입하기</button>';
+    h += '<div class="auth-switch">이미 가입하셨나요? <a onclick="AUTH_MODE=\'signin\';AUTH_ERROR=\'\';render()">로그인</a></div>';
+  } else if(AUTH_MODE === "reset"){
+    h += '<div style="font-size:12px;color:#86868b;margin-bottom:10px">가입한 이메일로 재설정 메일을 보내드립니다</div>';
+    h += '<input type="email" id="authEmail" class="auth-input" placeholder="이메일" autocomplete="email" inputmode="email">';
+    h += '<button class="auth-btn" onclick="submitReset()">재설정 메일 보내기</button>';
+    h += '<div class="auth-switch"><a onclick="AUTH_MODE=\'signin\';AUTH_ERROR=\'\';render()">로그인으로 돌아가기</a></div>';
+  }
+  h += '</div></div>';
+  app.innerHTML = h;
+  
+  // Auto-focus first empty input
+  setTimeout(()=>{
+    const e=document.getElementById('authEmail');
+    if(e && !e.value) e.focus();
+    else {
+      const p=document.getElementById('authPassword');
+      if(p)p.focus();
+    }
+  },50);
+}
+
+function submitSignIn(){
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  if(!email || !password){AUTH_ERROR="이메일과 비밀번호를 입력하세요";render();return}
+  handleSignIn(email, password);
+}
+
+function submitSignUp(){
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  const password2 = document.getElementById('authPassword2').value;
+  if(!email || !password){AUTH_ERROR="이메일과 비밀번호를 입력하세요";render();return}
+  if(password !== password2){AUTH_ERROR="비밀번호가 일치하지 않습니다";render();return}
+  handleSignUp(email, password);
+}
+
+function submitReset(){
+  const email = document.getElementById('authEmail').value.trim();
+  handleResetPassword(email);
+}
+
+function renderLoadingScreen(){
+  const app = document.getElementById('app');
+  app.innerHTML = '<div class="auth-screen"><div class="auth-logo">🏫</div><div class="auth-title">통영고 교무 도우미</div><div class="auth-subtitle">로딩 중...</div></div>';
+}
+
 function render(){
+  // Auth gate
+  if(AUTH_CHECKING){renderLoadingScreen();return}
+  if(!CURRENT_USER){renderAuthScreen();return}
+  
   const app=document.getElementById('app');
   let h=renderTopbar();
   h+='<div class="content">';
