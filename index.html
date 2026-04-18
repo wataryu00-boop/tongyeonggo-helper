@@ -300,47 +300,94 @@ let FB_READY = false;
 function todayStr(){return new Date().toISOString().slice(0,10)}
 function formatDate(s){const d=new Date(s);const days=["일","월","화","수","목","금","토"];return `${s} (${days[d.getDay()]})`}
 
-// Get effective schedule for a teacher on a specific date (applies overrides)
-function getEffectiveSlot(teacher, day, period, date){
+// Get the Monday of the week containing the given date (YYYY-MM-DD)
+function getWeekStart(dateStr){
+  const d = new Date(dateStr);
+  const day = d.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  const offset = day === 0 ? -6 : 1 - day; // Shift to Monday
+  d.setDate(d.getDate() + offset);
+  return d.toISOString().slice(0,10);
+}
+// Get the Sunday of the same week
+function getWeekEnd(dateStr){
+  const monday = new Date(getWeekStart(dateStr));
+  monday.setDate(monday.getDate() + 6);
+  return monday.toISOString().slice(0,10);
+}
+// Format week range as "MM/DD - MM/DD"
+function formatWeek(dateStr){
+  const ws = getWeekStart(dateStr);
+  const we = getWeekEnd(dateStr);
+  const s = new Date(ws), e = new Date(we);
+  return `${s.getMonth()+1}/${s.getDate()} ~ ${e.getMonth()+1}/${e.getDate()} (${ws.slice(0,4)}년)`;
+}
+// Convert day character (월/화/수/목/금) to an actual date within a given week
+function dayCharToDate(weekStart, dayChar){
+  const idx = DAYS.indexOf(dayChar); // 0=월, 4=금
+  if(idx < 0) return null;
+  const d = new Date(weekStart);
+  d.setDate(d.getDate() + idx);
+  return d.toISOString().slice(0,10);
+}
+// Get the date from a weekStart + day character (e.g., "4/24 (금)")
+function formatDayInWeek(weekStart, dayChar, period){
+  const date = dayCharToDate(weekStart, dayChar);
+  if(!date) return `${dayChar}${period}`;
+  const d = new Date(date);
+  return `${d.getMonth()+1}/${d.getDate()}(${dayChar}) ${period}교시`;
+}
+
+// Get effective schedule for a teacher in a specific week (applies overrides)
+// targetWeek: Monday YYYY-MM-DD of the week we want to view
+function getEffectiveSlot(teacher, day, period, targetWeek){
   const k = day + period;
   const orig = teacher.s[k];
-  if(!date || !RECORDS[date]) return orig;
-  // Check if any record affects this slot
-  const records = Object.values(RECORDS[date]);
+  if(!targetWeek || !RECORDS[targetWeek]) return {val:orig, changed:false};
+  const records = Object.values(RECORDS[targetWeek]);
   for(const rec of records){
     if(rec.type === "sub"){
-      // Substitute: if this teacher is the substitute, they get the class
+      // Substitute takes the class at that slot
       if(rec.substitute === teacher.n && rec.day === day && rec.period === period){
-        return `대강:${rec.subj}|${rec.room}`;
+        return {val:`대강:${rec.subj}|${rec.room}`, changed:true, reason:"대강 배정"};
       }
-      // If this is the original teacher's slot, it's covered but not changed
-      // (the substitute takes the class, original teacher's slot remains marked)
+      // Original teacher loses that slot (marked as canceled)
+      if(rec.teacher === teacher.n && rec.day === day && rec.period === period){
+        return {val:"취소", changed:true, reason:"대강자에게 위임"};
+      }
     }
     if(rec.type === "swap"){
-      // Swap: move classes between two teachers
+      // Swap types:
+      //   - sameweek: both classes within this week (day1/day2 both in this week)
+      //   - cross: one class in this week, one in another week
+      // rec fields: week1, day1, period1, subj1, room1, teacher1
+      //             week2, day2, period2, subj2, room2, teacher2
+      
+      // Teacher1 perspective: their original slot moves out, new slot comes in
       if(rec.teacher1 === teacher.n){
-        // My original slot (day1/period1) → now teacher2's class
-        if(rec.day1 === day && rec.period1 === period){
-          return `교체:${rec.subj2}|${rec.room2}`;
+        // If rec.week1 === targetWeek and slot matches: their original class is gone (moved to week2)
+        if(rec.week1 === targetWeek && rec.day1 === day && rec.period1 === period){
+          return {val:"교체→", changed:true, reason:`${rec.week2} ${rec.day2}${rec.period2}로 이동`};
         }
-        // My new slot (day2/period2) → my original class
-        if(rec.day2 === day && rec.period2 === period){
-          return orig ? orig : `교체:${rec.subj1}|${rec.room1}`;
+        // If rec.week2 === targetWeek and slot matches: they now teach teacher2's original class here
+        if(rec.week2 === targetWeek && rec.day2 === day && rec.period2 === period){
+          return {val:`교체:${rec.subj1}|${rec.room1}`, changed:true, reason:`원래 ${rec.week1} ${rec.day1}${rec.period1} 수업`};
         }
       }
+      
+      // Teacher2 perspective
       if(rec.teacher2 === teacher.n){
-        // Teacher2's original slot (day2/period2) → now my class
-        if(rec.day2 === day && rec.period2 === period){
-          return `교체:${rec.subj1}|${rec.room1}`;
+        // teacher2's original slot (week2/day2/period2) is gone
+        if(rec.week2 === targetWeek && rec.day2 === day && rec.period2 === period){
+          return {val:"교체→", changed:true, reason:`${rec.week1} ${rec.day1}${rec.period1}로 이동`};
         }
-        // Teacher2's new slot (day1/period1) → their original class
-        if(rec.day1 === day && rec.period1 === period){
-          return orig ? orig : `교체:${rec.subj2}|${rec.room2}`;
+        // teacher2 now teaches teacher1's original class at week1/day1/period1
+        if(rec.week1 === targetWeek && rec.day1 === day && rec.period1 === period){
+          return {val:`교체:${rec.subj2}|${rec.room2}`, changed:true, reason:`원래 ${rec.week2} ${rec.day2}${rec.period2} 수업`};
         }
       }
     }
   }
-  return orig;
+  return {val:orig, changed:false};
 }
 
 // Firebase integration
@@ -358,15 +405,15 @@ function setupFirebase(){
   });
 }
 
-function saveRecord(record){
+function saveRecord(record, weekStart){
   if(!FB_READY || !window.fb){
     alert("Firebase 연결 대기중입니다. 잠시 후 다시 시도해주세요.");
     return Promise.reject();
   }
-  const date = record.date || todayStr();
-  return window.fb.push(`overrides/${date}`, {
+  const wk = weekStart || record.week || getWeekStart(todayStr());
+  return window.fb.push(`overrides/${wk}`, {
     ...record,
-    date,
+    storedAt: wk,
     createdAt: new Date().toISOString()
   });
 }
@@ -530,17 +577,72 @@ function renderTimetable(teacher,onCellClick,selectedKey,hlKeys){
   return h;
 }
 
+// Same as renderTimetable but highlights changed slots and marks them with icon
+function renderTimetableWithChanges(teacher,onCellClick,selectedKey,changes){
+  let h='<div class="tt-wrap"><table class="tt"><thead><tr><th>⏰</th>';
+  DAYS.forEach(d=>{h+=`<th>${d}</th>`});
+  h+='</tr></thead><tbody>';
+  PERIODS.forEach(pr=>{
+    h+=`<tr><td style="background:#f5f5f7;color:#86868b;font-weight:700;font-size:11px">${pr}</td>`;
+    DAYS.forEach(d=>{
+      const k=d+pr;
+      const v=teacher.s[k];
+      const isSel=selectedKey===k;
+      const changed=changes&&changes[k];
+      const s=gs(teacher,d,pr);
+      const c=pc(v);
+      let cls='',style='';
+      if(s==='mark')cls='mark';
+      else if(s==='busy'){cls='busy';const bg=c?gc(c.subj):'';if(bg)style=`background:${bg}`}
+      else cls='empty';
+      if(isSel){cls+=' sel'}
+      if(changed&&!isSel){style+=';box-shadow:inset 0 0 0 2.5px #e65100;background:#fff3e0'}
+      const click=(onCellClick&&s==='busy')?`onclick="${onCellClick}('${k}')"`:'';
+      const tooltip=changed?` title="변경됨: ${changed.reason||''}"`:'';
+      h+=`<td class="${cls}" style="${style}" ${click}${tooltip}>`;
+      if(changed){
+        // Handle special values
+        if(changed.newVal==="취소"||changed.newVal==="교체→"){
+          h+='<div style="position:relative"><span style="position:absolute;top:-2px;right:0;font-size:9px">📤</span>';
+          h+='<div class="sn" style="color:#e65100;font-size:9px">'+(changed.newVal==="취소"?"위임":"→이동")+'</div>';
+          if(changed.origVal){const oc=pc(changed.origVal);h+=`<div class="rm" style="font-size:7px;color:#bf360c;text-decoration:line-through">${oc?oc.subj:""}</div>`}
+          h+='</div>';
+        }else if(c){
+          h+='<div style="position:relative"><span style="position:absolute;top:-2px;right:0;font-size:9px">🔄</span>';
+          h+=`<div class="sn" style="color:#e65100;font-weight:700">${c.full.length>8?c.subj:c.full}</div><div class="rm" style="color:#bf360c">${c.room}</div>`;
+          h+='</div>';
+        }else{
+          h+='<span style="color:#e65100;font-size:9px">변경</span>';
+        }
+      }else{
+        if(s==='mark')h+='<span style="color:#c7c7cc;font-size:9px">×</span>';
+        else if(s==='busy'&&c)h+=`<div class="sn">${c.full.length>8?c.subj:c.full}</div><div class="rm">${c.room}</div>`;
+        else h+='<span style="color:#d1d1d6;font-size:9px">·</span>';
+      }
+      h+='</td>';
+    });
+    h+='</tr>';
+  });
+  h+='</tbody></table></div>';
+  return h;
+}
+
 // ========== TAB: 수업 교체 ==========
 function renderSwapTab(){
   let h='';
-  // Date selector at top
-  const todayCount = (RECORDS[VIEW_DATE] && Object.keys(RECORDS[VIEW_DATE]).length) || 0;
+  // Week-based date selector
+  const weekStart = getWeekStart(VIEW_DATE);
+  const weekCount = (RECORDS[weekStart] && Object.keys(RECORDS[weekStart]).length) || 0;
   h+='<div class="card" style="padding:10px 12px;margin-bottom:8px">';
-  h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
-  h+='<div style="font-size:11px;font-weight:700;color:#86868b">📅 기준 날짜</div>';
+  h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">';
+  h+=`<div style="font-size:11px;font-weight:700;color:#1a237e">📅 조회 주: <b>${formatWeek(VIEW_DATE)}</b></div>`;
+  if(weekCount>0)h+=`<span style="background:#e65100;color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700">변경 ${weekCount}건</span>`;
+  h+='</div>';
+  h+='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">';
   h+=`<input type="date" value="${VIEW_DATE}" onchange="VIEW_DATE=this.value;SEL=null;render()" style="flex:1;min-width:140px;padding:6px 8px;border-radius:6px;border:1px solid #e5e5ea;font-size:12px;font-family:inherit">`;
-  h+=`<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="VIEW_DATE=todayStr();SEL=null;render()">오늘</button>`;
-  if(todayCount>0)h+=`<span style="background:#e65100;color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700">기록 ${todayCount}건 반영됨</span>`;
+  h+=`<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="VIEW_DATE=todayStr();SEL=null;render()">이번주</button>`;
+  h+=`<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="const d=new Date(VIEW_DATE);d.setDate(d.getDate()-7);VIEW_DATE=d.toISOString().slice(0,10);SEL=null;render()">◀ 이전주</button>`;
+  h+=`<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="const d=new Date(VIEW_DATE);d.setDate(d.getDate()+7);VIEW_DATE=d.toISOString().slice(0,10);SEL=null;render()">다음주 ▶</button>`;
   h+='</div></div>';
   
   if(ME===null){
@@ -550,10 +652,10 @@ function renderSwapTab(){
     return h;
   }
   const myT_orig=T[ME];
-  const myT=getTeacherWithOverrides(myT_orig, VIEW_DATE);
+  const {teacher: myT, changes: myChanges} = getTeacherWithOverrides(myT_orig, weekStart);
   h+=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div><div style="font-size:15px;font-weight:700">${myT.n}${deptTag(myT)}</div><div style="font-size:11px;color:#86868b;margin-top:2px">${myT.h}시수</div></div>`;
   h+=`<button class="btn btn-sec btn-sm" onclick="ME=null;SEL=null;render()">변경</button></div>`;
-  h+=renderTimetable(myT,'setSel',SEL,null);
+  h+=renderTimetableWithChanges(myT,'setSel',SEL,myChanges);
   h+='</div>';
 
   if(SEL){
@@ -561,23 +663,24 @@ function renderSwapTab(){
     if(selCell){
       const day=SEL[0],per=SEL.slice(1);
       const subs=[],swaps=[];
-      // Use effective (overridden) schedules for accurate sub/swap matching
+      // Use effective (overridden) schedules for accurate sub/swap matching (this week)
       T.forEach((t,i)=>{
         if(i===ME)return;
-        const tEff=getTeacherWithOverrides(t, VIEW_DATE);
+        const {teacher:tEff} = getTeacherWithOverrides(t, weekStart);
         if(gs(tEff,day,parseInt(per))==="free")subs.push({idx:i,name:t.n,dept:t.d})
       });
       const myRoom=selCell.room;
+      // Same-week swaps: find teachers with same-room classes in other slots this week, and they're free at my slot
       T.forEach((t,i)=>{
         if(i===ME)return;
-        const tEff=getTeacherWithOverrides(t, VIEW_DATE);
+        const {teacher:tEff} = getTeacherWithOverrides(t, weekStart);
         if(gs(tEff,day,parseInt(per))!=="free")return;
         DAYS.forEach(d2=>{PERIODS.forEach(p2=>{
           const k2=d2+p2;const c2=pc(tEff.s[k2]);
           if(!c2||c2.room!==myRoom)return;
           if(gs(myT,d2,p2)!=="free")return;
           if(gs(tEff,d2,p2)!=="busy")return;
-          swaps.push({idx:i,name:t.n,theirDay:d2,theirPer:p2,subj:c2.full,room:c2.room});
+          swaps.push({idx:i,name:t.n,theirDay:d2,theirPer:p2,subj:c2.full,room:c2.room,crossWeek:false,theirWeek:weekStart});
         })});
       });
       h+=`<div class="selected-banner"><div class="subj">${selCell.full}</div><div class="meta">${day}요일 ${per}교시 · ${selCell.room}교실</div></div>`;
@@ -611,8 +714,9 @@ function renderSwapTab(){
       h+='<div class="card">';
       h+=`<div class="result-head"><div class="card-title" style="margin:0;color:#1a237e">🔄 수업 교체</div><span class="badge">${swaps.length}</span></div>`;
       h+=`<div class="card-sub">같은 교실(${myRoom})에서 교체 가능한 수업</div>`;
-      if(swaps.length===0)h+='<div class="empty-state"><span class="emoji">🔍</span>교체 가능한 수업이 없습니다</div>';
-      else{swaps.forEach(s=>{h+=`<div class="swap-card" onclick='showSwapAnnouncement(${JSON.stringify({myName:myT.n,otherName:s.name,myDay:day,myPer:per,mySubj:selCell.full,myRoom:selCell.room,theirDay:s.theirDay,theirPer:s.theirPer,theirSubj:s.subj,theirRoom:s.room}).replace(/'/g,"&#39;")})'><div class="swap-card-top"><span class="swap-name">${s.name}</span><span class="swap-badge">${s.theirDay} ${s.theirPer}교시</span></div><div class="swap-detail"><b>${s.theirDay} ${s.theirPer}교시 ${s.subj}</b>(${s.room}교실)과 교체</div></div>`})}
+      if(swaps.length===0)h+='<div class="empty-state"><span class="emoji">🔍</span>같은 주 교체 가능 수업이 없습니다</div>';
+      else{swaps.forEach(s=>{h+=`<div class="swap-card" onclick='showSwapAnnouncement(${JSON.stringify({myName:myT.n,otherName:s.name,myDay:day,myPer:per,mySubj:selCell.full,myRoom:selCell.room,theirDay:s.theirDay,theirPer:s.theirPer,theirSubj:s.subj,theirRoom:s.room,myWeek:weekStart,theirWeek:weekStart}).replace(/'/g,"&#39;")})'><div class="swap-card-top"><span class="swap-name">${s.name}</span><span class="swap-badge">${s.theirDay} ${s.theirPer}교시</span></div><div class="swap-detail"><b>${s.theirDay} ${s.theirPer}교시 ${s.subj}</b>(${s.room}교실)과 교체</div></div>`})}
+      h+=`<button class="btn btn-outline btn-full" style="margin-top:8px" onclick='openCrossWeekSwap(${JSON.stringify({myName:myT.n,myDay:day,myPer:per,mySubj:selCell.full,myRoom:selCell.room,myWeek:weekStart}).replace(/'/g,"&#39;")})'>🗓️ 다른 주 수업과 교체</button>`
       h+='</div>';
     }
   }
@@ -740,10 +844,12 @@ function showSubAnnouncement(d){
 
 function confirmSub(d){
   if(!FB_READY){alert("Firebase 연결 중입니다. 잠시 후 다시 시도해주세요.");return}
+  const week = getWeekStart(VIEW_DATE);
   const record = {
     type: "sub",
     teacher: d.myName,
     substitute: d.subName,
+    week,
     day: d.day,
     period: parseInt(d.per),
     subj: d.subj,
@@ -752,7 +858,7 @@ function confirmSub(d){
   };
   const btn=document.getElementById('confirmSubBtn');
   if(btn){btn.textContent="저장 중...";btn.disabled=true}
-  saveRecord(record).then(()=>{
+  saveRecord(record, week).then(()=>{
     if(btn){btn.textContent="✅ 확정됨";btn.style.background="#2e7d32"}
     setTimeout(()=>{closeSheet();setTab('records')},800);
   }).catch(e=>{
@@ -890,23 +996,109 @@ function showSwapAnnouncement(d){
 
 function confirmSwap(d){
   if(!FB_READY){alert("Firebase 연결 중입니다. 잠시 후 다시 시도해주세요.");return}
+  // Use VIEW_DATE's week for "my" side, d.theirWeek for the other side (may differ for cross-week)
+  const week1 = d.myWeek || getWeekStart(VIEW_DATE);
+  const week2 = d.theirWeek || getWeekStart(VIEW_DATE);
   const record = {
     type: "swap",
     teacher1: d.myName,
     teacher2: d.otherName,
-    day1: d.myDay, period1: parseInt(d.myPer), subj1: d.mySubj, room1: d.myRoom,
-    day2: d.theirDay, period2: parseInt(d.theirPer), subj2: d.theirSubj, room2: d.theirRoom,
+    week1, day1: d.myDay, period1: parseInt(d.myPer), subj1: d.mySubj, room1: d.myRoom,
+    week2, day2: d.theirDay, period2: parseInt(d.theirPer), subj2: d.theirSubj, room2: d.theirRoom,
+    crossWeek: week1 !== week2,
     createdBy: d.myName
   };
   const btn=document.getElementById('confirmSwapBtn');
   if(btn){btn.textContent="저장 중...";btn.disabled=true}
-  saveRecord(record).then(()=>{
+  // Save under week1; if cross-week, also save reference under week2
+  const weekForStorage = week1; // Primary storage week
+  saveRecord(record, weekForStorage).then((ref)=>{
+    if(record.crossWeek){
+      // Also write a reference in the other week
+      return saveRecord({...record, crossRef: ref.key}, week2).then(()=>{
+        if(btn){btn.textContent="✅ 확정됨";btn.style.background="#2e7d32"}
+        setTimeout(()=>{closeSheet();setTab('records')},800);
+      });
+    }
     if(btn){btn.textContent="✅ 확정됨";btn.style.background="#2e7d32"}
     setTimeout(()=>{closeSheet();setTab('records')},800);
   }).catch(e=>{
     if(btn){btn.textContent="✅ 기록 확정";btn.disabled=false}
     alert("저장 실패: "+e.message);
   });
+}
+
+// Cross-week swap: user selected their slot, now pick target week + slot
+let CROSS_SWAP_STATE = null;
+function openCrossWeekSwap(myInfo){
+  CROSS_SWAP_STATE = {myInfo, targetWeek: getWeekStart(VIEW_DATE)};
+  renderCrossWeekSheet();
+}
+function changeCrossWeek(delta){
+  const d = new Date(CROSS_SWAP_STATE.targetWeek);
+  d.setDate(d.getDate() + delta*7);
+  CROSS_SWAP_STATE.targetWeek = d.toISOString().slice(0,10);
+  renderCrossWeekSheet();
+}
+function renderCrossWeekSheet(){
+  const st = CROSS_SWAP_STATE;
+  if(!st) return;
+  const myInfo = st.myInfo;
+  const targetWk = st.targetWeek;
+  const myRoom = myInfo.myRoom;
+  const me = T.find(t=>t.n===myInfo.myName);
+  
+  // Find all swappable slots for the target week:
+  // - Another teacher's class in the same room (210 etc)
+  // - They are free at my slot in my week
+  // - I am free at their slot in the target week
+  const candidates = [];
+  T.forEach((t,i)=>{
+    if(t.n===myInfo.myName)return;
+    const {teacher:tEff} = getTeacherWithOverrides(t, targetWk);
+    // They must be free in my week at my slot
+    const {teacher:tInMyWeek} = getTeacherWithOverrides(t, myInfo.myWeek);
+    if(gs(tInMyWeek, myInfo.myDay, parseInt(myInfo.myPer)) !== "free")return;
+    // I must be free in target week at their slot
+    const {teacher:meInTargetWeek} = getTeacherWithOverrides(me, targetWk);
+    DAYS.forEach(d2=>{PERIODS.forEach(p2=>{
+      const c2 = pc(tEff.s[d2+p2]);
+      if(!c2 || c2.room !== myRoom)return;
+      if(gs(tEff,d2,p2) !== "busy")return;
+      if(gs(meInTargetWeek,d2,p2) !== "free")return;
+      // If target week is same as my week and slot is same, skip (same-week already handled)
+      if(targetWk === myInfo.myWeek && d2 === myInfo.myDay && p2 === parseInt(myInfo.myPer))return;
+      candidates.push({teacher:t.n, dept:t.d, day:d2, per:p2, subj:c2.full, room:c2.room});
+    })});
+  });
+  
+  let body = '';
+  body += `<div style="background:#f0f4ff;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#1a237e">`;
+  body += `<b>내 수업:</b> ${formatWeek(myInfo.myWeek)}<br>${myInfo.myDay}요일 ${myInfo.myPer}교시 · ${myInfo.mySubj}(${myInfo.myRoom}실)`;
+  body += `</div>`;
+  
+  // Week picker
+  body += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">`;
+  body += `<button class="btn btn-sec btn-sm" onclick="changeCrossWeek(-1)">◀ 이전주</button>`;
+  body += `<div style="flex:1;text-align:center;font-size:12px;font-weight:700;color:#1a237e">교체 대상 주<br><span style="font-size:13px">${formatWeek(targetWk)}</span></div>`;
+  body += `<button class="btn btn-sec btn-sm" onclick="changeCrossWeek(1)">다음주 ▶</button>`;
+  body += `</div>`;
+  
+  if(targetWk === myInfo.myWeek){
+    body += `<div style="background:#fff8e1;border-left:3px solid #fbc02d;padding:8px 12px;border-radius:0 8px 8px 0;font-size:11px;color:#6d4c00;margin-bottom:10px">같은 주예요. 다른 주를 선택하거나 뒤로 가세요.</div>`;
+  }
+  
+  body += `<div style="font-size:13px;font-weight:700;margin-bottom:6px">🔄 교체 가능 수업 (${candidates.length}건)</div>`;
+  if(candidates.length === 0){
+    body += `<div class="empty-state"><span class="emoji">🔍</span>이 주에는 같은 교실(${myRoom}) 교체 가능 수업이 없습니다</div>`;
+  } else {
+    candidates.forEach(c=>{
+      const payload = {myName:myInfo.myName,otherName:c.teacher,myDay:myInfo.myDay,myPer:myInfo.myPer,mySubj:myInfo.mySubj,myRoom:myInfo.myRoom,theirDay:c.day,theirPer:c.per,theirSubj:c.subj,theirRoom:c.room,myWeek:myInfo.myWeek,theirWeek:targetWk};
+      body += `<div class="swap-card" onclick='showSwapAnnouncement(${JSON.stringify(payload).replace(/'/g,"&#39;")})'><div class="swap-card-top"><span class="swap-name">${c.teacher}</span><span class="swap-badge">${c.day} ${c.per}교시</span></div><div class="swap-detail"><b>${c.day} ${c.per}교시 ${c.subj}</b>(${c.room}실)과 교체 · <span style="color:#86868b">${c.dept}</span></div></div>`;
+    });
+  }
+  
+  openSheet('🗓️ 다른 주 수업과 교체', body);
 }
 
 // ========== TAB: 시간별 공강 ==========
@@ -1269,42 +1461,49 @@ function renderViewTab(){
 
 
 // Get a teacher with effective (overridden) schedule applied
-function getTeacherWithOverrides(teacher, date){
-  if(!date || !RECORDS[date] || Object.keys(RECORDS[date]).length===0) return teacher;
+// targetWeek: Monday YYYY-MM-DD of the week we want
+// Returns {teacher: {n,h,d,s}, changes: {day+period: {reason, origVal, newVal}}}
+function getTeacherWithOverrides(teacher, targetWeek){
+  const changes = {};
+  if(!targetWeek || !RECORDS[targetWeek] || Object.keys(RECORDS[targetWeek]).length===0){
+    return {teacher, changes};
+  }
   const copy = {...teacher, s:{...teacher.s}};
   DAYS.forEach(d=>{PERIODS.forEach(p=>{
-    const eff = getEffectiveSlot(teacher, d, p, date);
-    if(eff !== teacher.s[d+p]){
-      copy.s[d+p] = eff || undefined;
-      if(!eff) delete copy.s[d+p];
+    const result = getEffectiveSlot(teacher, d, p, targetWeek);
+    if(result.changed){
+      changes[d+p] = {reason: result.reason, origVal: teacher.s[d+p]||null, newVal: result.val};
+      if(result.val === "취소" || result.val === "교체→"){
+        delete copy.s[d+p];
+      }else{
+        copy.s[d+p] = result.val;
+      }
     }
   })});
-  return copy;
+  return {teacher:copy, changes};
 }
 
 // ========== TAB: 기록 (Records) ==========
 function renderRecordsTab(){
   let h='';
+  const weekStart = getWeekStart(VIEW_DATE);
   h+='<div class="card">';
-  h+='<div class="help-text">💡 <b>확정된 교체/대강 기록</b>을 날짜별로 관리합니다. 기록된 내용은 시간표에 자동 반영돼요.</div>';
+  h+='<div class="help-text">💡 <b>확정된 교체/대강 기록</b>을 주 단위로 관리합니다. 기록은 그 주의 시간표에만 반영돼요.</div>';
   
-  // Date selector
   h+='<div style="margin-bottom:10px">';
-  h+='<div style="font-size:12px;font-weight:700;margin-bottom:6px">📅 조회 날짜</div>';
+  h+=`<div style="font-size:12px;font-weight:700;margin-bottom:6px">📅 조회 주: <span style="color:#1a237e">${formatWeek(VIEW_DATE)}</span></div>`;
   h+=`<input type="date" value="${VIEW_DATE}" onchange="VIEW_DATE=this.value;render()" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid #e5e5ea;font-size:15px;font-family:inherit;background:#fff">`;
-  h+='<div style="display:flex;gap:4px;margin-top:6px">';
-  h+=`<button class="qa-btn" onclick="VIEW_DATE=todayStr();render()">오늘</button>`;
-  h+=`<button class="qa-btn" onclick="VIEW_DATE=new Date(Date.now()+86400000).toISOString().slice(0,10);render()">내일</button>`;
-  const yesterday = new Date(Date.now()-86400000).toISOString().slice(0,10);
-  h+=`<button class="qa-btn" onclick="VIEW_DATE='${yesterday}';render()">어제</button>`;
+  h+='<div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">';
+  h+=`<button class="qa-btn" onclick="VIEW_DATE=todayStr();render()">이번주</button>`;
+  h+=`<button class="qa-btn" onclick="const d=new Date(VIEW_DATE);d.setDate(d.getDate()-7);VIEW_DATE=d.toISOString().slice(0,10);render()">◀ 이전주</button>`;
+  h+=`<button class="qa-btn" onclick="const d=new Date(VIEW_DATE);d.setDate(d.getDate()+7);VIEW_DATE=d.toISOString().slice(0,10);render()">다음주 ▶</button>`;
   h+='</div>';
   h+='</div>';
   
-  // Show records for VIEW_DATE
-  const dateRecords = RECORDS[VIEW_DATE] || {};
-  const recordList = Object.entries(dateRecords).sort((a,b)=>(a[1].createdAt||"").localeCompare(b[1].createdAt||""));
+  const weekRecords = RECORDS[weekStart] || {};
+  const recordList = Object.entries(weekRecords).sort((a,b)=>(a[1].createdAt||"").localeCompare(b[1].createdAt||""));
   
-  h+=`<div style="background:#f0f4ff;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#1a237e"><b>${formatDate(VIEW_DATE)}</b> · 기록 ${recordList.length}건</div>`;
+  h+=`<div style="background:#f0f4ff;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#1a237e"><b>주간 변경 ${recordList.length}건</b> · 저장주: ${weekStart}</div>`;
   
   if(!FB_READY){
     h+='<div class="empty-state"><span class="emoji">🔄</span>Firebase 연결 중...</div>';
@@ -1313,7 +1512,7 @@ function renderRecordsTab(){
   }
   
   if(recordList.length === 0){
-    h+='<div class="empty-state"><span class="emoji">📭</span>이 날짜에 기록된 교체/대강이 없습니다</div>';
+    h+='<div class="empty-state"><span class="emoji">📭</span>이 주에 기록된 교체/대강이 없습니다</div>';
     h+='<div style="text-align:center;font-size:11px;color:#86868b;margin-top:4px">수업 교체 탭에서 교체/대강을 확정하면 여기에 기록됩니다</div>';
     h+='</div>';
     return h;
@@ -1321,34 +1520,37 @@ function renderRecordsTab(){
   
   h+='</div>';
   
-  // Render each record
   recordList.forEach(([id, rec])=>{
     const isSwap = rec.type === "swap";
     const bgColor = isSwap ? "#e3f2fd" : "#fff3e0";
     const borderColor = isSwap ? "#1565c0" : "#e65100";
     const icon = isSwap ? "🔄" : "🆘";
     const label = isSwap ? "수업 교체" : "대강";
+    const isCross = rec.crossWeek;
     
     h+='<div class="card" style="border-left:4px solid '+borderColor+'">';
     h+='<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">';
-    h+=`<div><div style="font-size:14px;font-weight:700;color:${borderColor}">${icon} ${label}</div>`;
+    h+=`<div><div style="font-size:14px;font-weight:700;color:${borderColor}">${icon} ${label}${isCross?' <span style="font-size:10px;background:#ffecb3;color:#e65100;padding:1px 6px;border-radius:8px;margin-left:4px">다른 주 교체</span>':''}</div>`;
     if(rec.createdAt){
       const t = new Date(rec.createdAt);
       h+=`<div style="font-size:10px;color:#86868b;margin-top:2px">${t.toLocaleString('ko-KR',{hour12:false})}${rec.createdBy?" · "+rec.createdBy:""}</div>`;
     }
     h+='</div>';
-    h+=`<button onclick="confirmDeleteRecord('${VIEW_DATE}','${id}')" style="background:#fff;border:1px solid #e5e5ea;color:#c62828;padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit">삭제</button>`;
+    h+=`<button onclick="confirmDeleteRecord('${weekStart}','${id}', ${JSON.stringify(rec).replace(/'/g,"&#39;").replace(/"/g,"&quot;").length > 0 ? "true" : "false"})" style="background:#fff;border:1px solid #e5e5ea;color:#c62828;padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit">삭제</button>`;
     h+='</div>';
     
     if(isSwap){
       h+='<div style="background:'+bgColor+';border-radius:8px;padding:10px;font-size:12px;line-height:1.6">';
       h+=`<div><b>${rec.teacher1}</b> ↔ <b>${rec.teacher2}</b></div>`;
-      h+=`<div style="margin-top:4px;color:#424245">• ${rec.day1}${rec.period1}교시 <b>${rec.subj1}</b>(${rec.room1}실) → ${rec.teacher2}이(가) 대신 수업</div>`;
-      h+=`<div style="color:#424245">• ${rec.day2}${rec.period2}교시 <b>${rec.subj2}</b>(${rec.room2}실) → ${rec.teacher1}이(가) 대신 수업</div>`;
+      const w1label = rec.week1 ? formatDayInWeek(rec.week1, rec.day1, rec.period1) : `${rec.day1}${rec.period1}교시`;
+      const w2label = rec.week2 ? formatDayInWeek(rec.week2, rec.day2, rec.period2) : `${rec.day2}${rec.period2}교시`;
+      h+=`<div style="margin-top:4px;color:#424245">• ${w1label} <b>${rec.subj1}</b>(${rec.room1}실) → <b style="color:#1565c0">${rec.teacher2}</b>이(가) 담당</div>`;
+      h+=`<div style="color:#424245">• ${w2label} <b>${rec.subj2}</b>(${rec.room2}실) → <b style="color:#1565c0">${rec.teacher1}</b>이(가) 담당</div>`;
       h+='</div>';
     }else{
       h+='<div style="background:'+bgColor+';border-radius:8px;padding:10px;font-size:12px;line-height:1.6">';
-      h+=`<div><b>${rec.day}${rec.period}교시</b> · <b>${rec.subj}</b>(${rec.room}실)</div>`;
+      const daylabel = rec.week ? formatDayInWeek(rec.week, rec.day, rec.period) : `${rec.day}${rec.period}교시`;
+      h+=`<div><b>${daylabel}</b> · <b>${rec.subj}</b>(${rec.room}실)</div>`;
       h+=`<div style="margin-top:4px;color:#424245">${rec.teacher} 선생님 수업 → <b style="color:#e65100">${rec.substitute}</b> 선생님 대강</div>`;
       if(rec.reason)h+=`<div style="margin-top:4px;color:#86868b;font-size:11px">사유: ${rec.reason}</div>`;
       h+='</div>';
@@ -1359,9 +1561,9 @@ function renderRecordsTab(){
   return h;
 }
 
-function confirmDeleteRecord(date, id){
+function confirmDeleteRecord(weekStart, id){
   if(!confirm("이 기록을 삭제하시겠습니까?\n삭제하면 시간표에서도 제거됩니다."))return;
-  deleteRecord(date, id).then(()=>{
+  deleteRecord(weekStart, id).then(()=>{
     // Records will auto-update via onValue listener
   }).catch(e=>alert("삭제 실패: "+e.message));
 }
