@@ -343,11 +343,12 @@ let VIEW_DATE = new Date().toISOString().slice(0,10); // YYYY-MM-DD
 let FB_READY = false;
 
 // Auth state
-let CURRENT_USER = null; // {uid, email, teacherName, homeroom}
+let CURRENT_USER = null; // {uid, email, teacherName, homeroom, status}
 let AUTH_MODE = "signin"; // "signin" | "signup" | "reset"
 let AUTH_CHECKING = true; // true until we know auth state
 let AUTH_ERROR = "";
 let FORCE_RESET_MODE = false; // true when user must reset password
+let APPROVAL_STATUS = null; // "pending" | "approved" | "rejected"
 let ALL_USERS = {}; // {uid: {teacherName, homeroom, email, ...}} - all registered users
 
 // Admin config: email(s) of admin user(s)
@@ -474,13 +475,49 @@ function setupFirebase(){
           uid: user.uid,
           email: user.email,
           teacherName: profile.teacherName || null,
-          homeroom: profile.homeroom || null
+          homeroom: profile.homeroom || null,
+          status: profile.status || null
         };
       } catch(e) {
-        CURRENT_USER = {uid: user.uid, email: user.email, teacherName: null, homeroom: null};
+        CURRENT_USER = {uid: user.uid, email: user.email, teacherName: null, homeroom: null, status: null};
       }
       // Check forced password reset flag
       FORCE_RESET_MODE = !!profile.forcePasswordReset;
+      
+      // Determine approval status
+      // 1) Admin emails are auto-approved
+      // 2) Existing profile has a status field
+      // 3) New user (no profile) → auto-register as pending
+      if(ADMIN_EMAILS.includes(user.email)){
+        APPROVAL_STATUS = "approved";
+        // Ensure admin's profile has approved status
+        if(profile.status !== "approved"){
+          try{
+            await window.fb.set(`users/${user.uid}`, {
+              ...profile,
+              email: user.email,
+              status: "approved",
+              isAdmin: true,
+              updatedAt: new Date().toISOString(),
+              registeredAt: profile.registeredAt || new Date().toISOString()
+            });
+          }catch(e){console.error("관리자 상태 저장 실패:", e)}
+        }
+      } else if(profile.status){
+        APPROVAL_STATUS = profile.status;
+      } else {
+        // New user - register as pending
+        APPROVAL_STATUS = "pending";
+        try{
+          await window.fb.set(`users/${user.uid}`, {
+            email: user.email,
+            status: "pending",
+            registeredAt: new Date().toISOString()
+          });
+        }catch(e){
+          console.error("대기 상태 저장 실패:", e);
+        }
+      }
       // Listen for record changes
       window.fb.onValue("overrides", (snapshot) => {
         const data = snapshot.val() || {};
@@ -499,8 +536,14 @@ function setupFirebase(){
             const p = data[CURRENT_USER.uid];
             CURRENT_USER.teacherName = p.teacherName || null;
             CURRENT_USER.homeroom = p.homeroom || null;
-            // Sync force reset flag
+            CURRENT_USER.status = p.status || null;
             FORCE_RESET_MODE = !!p.forcePasswordReset;
+            // Update approval status (admin stays approved)
+            if(ADMIN_EMAILS.includes(CURRENT_USER.email)){
+              APPROVAL_STATUS = "approved";
+            } else {
+              APPROVAL_STATUS = p.status || "pending";
+            }
           }
           render();
         });
@@ -513,7 +556,13 @@ function setupFirebase(){
           if(p && CURRENT_USER){
             CURRENT_USER.teacherName = p.teacherName || null;
             CURRENT_USER.homeroom = p.homeroom || null;
+            CURRENT_USER.status = p.status || null;
             FORCE_RESET_MODE = !!p.forcePasswordReset;
+            if(ADMIN_EMAILS.includes(CURRENT_USER.email)){
+              APPROVAL_STATUS = "approved";
+            } else {
+              APPROVAL_STATUS = p.status || "pending";
+            }
             ALL_USERS[CURRENT_USER.uid] = p;
             render();
           }
@@ -524,6 +573,8 @@ function setupFirebase(){
       CURRENT_USER = null;
       RECORDS = {};
       ALL_USERS = {};
+      APPROVAL_STATUS = null;
+      FORCE_RESET_MODE = false;
     }
     render();
   });
@@ -2225,6 +2276,57 @@ async function adminCancelForceReset(uid){
   }
 }
 
+async function adminApproveUser(uid){
+  if(!isAdmin()){alert("관리자 권한 필요");return}
+  try{
+    const existing = ALL_USERS[uid] || {};
+    await window.fb.set(`users/${uid}`, {
+      ...existing,
+      status: "approved",
+      approvedAt: new Date().toISOString(),
+      approvedBy: CURRENT_USER.email
+    });
+    console.log(`✅ ${existing.email} 승인됨`);
+  }catch(e){
+    alert("승인 실패: "+e.message);
+  }
+}
+
+async function adminRejectUser(uid){
+  if(!isAdmin()){alert("관리자 권한 필요");return}
+  const user = ALL_USERS[uid];
+  if(!user){alert("사용자를 찾을 수 없습니다");return}
+  if(!confirm(`🚫 ${user.email} 가입을 거부하시겠습니까?\n\n거부된 계정은 앱에 접근할 수 없습니다.\n(나중에 다시 승인할 수 있습니다)`))return;
+  try{
+    const existing = ALL_USERS[uid] || {};
+    await window.fb.set(`users/${uid}`, {
+      ...existing,
+      status: "rejected",
+      rejectedAt: new Date().toISOString(),
+      rejectedBy: CURRENT_USER.email
+    });
+  }catch(e){
+    alert("거부 실패: "+e.message);
+  }
+}
+
+async function adminUnapproveUser(uid){
+  if(!isAdmin()){alert("관리자 권한 필요");return}
+  const user = ALL_USERS[uid];
+  if(!user){return}
+  if(uid === CURRENT_USER.uid){alert("본인을 승인 해제할 수 없습니다");return}
+  if(!confirm(`⏳ ${user.email}의 승인을 해제하고 대기 상태로 되돌리시겠습니까?`))return;
+  try{
+    const existing = ALL_USERS[uid] || {};
+    const updated = {...existing, status: "pending"};
+    delete updated.approvedAt;
+    delete updated.approvedBy;
+    await window.fb.set(`users/${uid}`, updated);
+  }catch(e){
+    alert("해제 실패: "+e.message);
+  }
+}
+
 async function adminSendResetEmail(uid){
   if(!isAdmin()){alert("관리자 권한 필요");return}
   const user = ALL_USERS[uid];
@@ -2269,12 +2371,47 @@ function renderAdminTab(){
   
   h+='<div class="card">';
   h+='<div class="help-text">👑 관리자 전용 · <b>이름/반 충돌</b>을 해결하거나 사용자 정보를 수정할 수 있습니다</div>';
+  // Count by status
+  let countPending=0, countApproved=0, countRejected=0;
+  userList.forEach(([uid,p])=>{
+    if(!p||!p.status) countPending++;
+    else if(p.status === "pending") countPending++;
+    else if(p.status === "approved") countApproved++;
+    else if(p.status === "rejected") countRejected++;
+  });
+  
   h+='<div class="stat-grid">';
-  h+=`<div class="stat-card"><div class="stat-num">${userList.length}</div><div class="stat-lbl">가입 교사</div></div>`;
-  h+=`<div class="stat-card"><div class="stat-num">${withName}</div><div class="stat-lbl">이름 설정됨</div></div>`;
-  h+=`<div class="stat-card"><div class="stat-num">${withHomeroom}</div><div class="stat-lbl">담임 설정됨</div></div>`;
+  h+=`<div class="stat-card"><div class="stat-num">${userList.length}</div><div class="stat-lbl">전체 가입</div></div>`;
+  h+=`<div class="stat-card" style="${countPending>0?'background:#fff8e1;border:1px solid #ffc107':''}"><div class="stat-num" style="${countPending>0?'color:#e65100':''}">${countPending}</div><div class="stat-lbl">⏳ 승인 대기</div></div>`;
+  h+=`<div class="stat-card"><div class="stat-num" style="color:#2e7d32">${countApproved}</div><div class="stat-lbl">✅ 승인됨</div></div>`;
   h+=`<div class="stat-card" style="${needsReset>0?'background:#fff3e0;border:1px solid #ffb74d':''}"><div class="stat-num" style="${needsReset>0?'color:#e65100':''}">${needsReset}</div><div class="stat-lbl">🔒 재설정 대기</div></div>`;
   h+='</div></div>';
+  
+  // Pending approval section - prominent at top
+  const pendingUsers = userList.filter(([uid,p])=>(!p||!p.status||p.status==="pending") && !ADMIN_EMAILS.includes(p?p.email:""));
+  if(pendingUsers.length > 0){
+    h+='<div class="card" style="border-left:4px solid #ff9800;background:#fff8e1">';
+    h+=`<div class="card-title" style="color:#e65100">⏳ 승인 대기 <span class="badge orange">${pendingUsers.length}</span></div>`;
+    h+='<div class="help-text" style="background:#fff;border-left-color:#ff9800">💡 신규 가입자입니다. 본인이 맞는지 확인 후 승인해주세요</div>';
+    
+    pendingUsers.forEach(([uid,p])=>{
+      h+='<div style="background:#fff;border:1px solid #ffe082;border-radius:10px;padding:12px;margin-bottom:6px">';
+      h+='<div style="display:flex;justify-content:space-between;align-items:start;gap:8px;margin-bottom:8px">';
+      h+='<div style="flex:1;min-width:0">';
+      h+=`<div style="font-size:13px;font-weight:700;color:#e65100">📧 ${p&&p.email||uid}</div>`;
+      if(p&&p.registeredAt){
+        const t=new Date(p.registeredAt);
+        h+=`<div style="font-size:10px;color:#86868b;margin-top:2px">가입: ${t.toLocaleString('ko-KR',{hour12:false})}</div>`;
+      }
+      h+='</div></div>';
+      h+='<div style="display:flex;gap:6px">';
+      h+=`<button class="btn btn-sm" style="flex:1;background:#2e7d32" onclick="adminApproveUser('${uid}')">✅ 승인</button>`;
+      h+=`<button class="btn btn-sm" style="flex:1;background:#fff;color:#c62828;border:1px solid #ef5350" onclick="adminRejectUser('${uid}')">🚫 거부</button>`;
+      h+='</div>';
+      h+='</div>';
+    });
+    h+='</div>';
+  }
   
   // 중복/충돌 감지
   const nameMap = {}, homeroomMap = {};
@@ -2338,7 +2475,12 @@ function renderAdminTab(){
     h+='<div style="display:flex;justify-content:space-between;align-items:start;gap:8px">';
     h+='<div style="flex:1;min-width:0">';
     const needsReset = p && p.forcePasswordReset;
-    h+=`<div style="font-size:13px;font-weight:700">${hasName?p.teacherName:'<span style="color:#c62828">이름 미설정</span>'}${hasHr?' · '+p.homeroom:''}${isSelf?' <span style="background:#ffc107;color:#5d4037;font-size:9px;padding:1px 5px;border-radius:4px">나</span>':''}${hasConflict?' <span style="background:#ffebee;color:#c62828;font-size:9px;padding:1px 5px;border-radius:4px">⚠️ 충돌</span>':''}${needsReset?' <span style="background:#fff3e0;color:#e65100;font-size:9px;padding:1px 5px;border-radius:4px">🔒 재설정대기</span>':''}</div>`;
+    const status = p && p.status;
+    let statusBadge = '';
+    if(ADMIN_EMAILS.includes(p&&p.email||"")) statusBadge = ' <span style="background:#ffc107;color:#5d4037;font-size:9px;padding:1px 5px;border-radius:4px">👑 관리자</span>';
+    else if(!status || status === "pending") statusBadge = ' <span style="background:#fff8e1;color:#e65100;font-size:9px;padding:1px 5px;border-radius:4px">⏳ 대기</span>';
+    else if(status === "rejected") statusBadge = ' <span style="background:#ffebee;color:#c62828;font-size:9px;padding:1px 5px;border-radius:4px">🚫 거부됨</span>';
+    h+=`<div style="font-size:13px;font-weight:700">${hasName?p.teacherName:'<span style="color:#c62828">이름 미설정</span>'}${hasHr?' · '+p.homeroom:''}${isSelf?' <span style="background:#ffc107;color:#5d4037;font-size:9px;padding:1px 5px;border-radius:4px">나</span>':''}${statusBadge}${hasConflict?' <span style="background:#ffebee;color:#c62828;font-size:9px;padding:1px 5px;border-radius:4px">⚠️ 충돌</span>':''}${needsReset?' <span style="background:#fff3e0;color:#e65100;font-size:9px;padding:1px 5px;border-radius:4px">🔒 재설정대기</span>':''}</div>`;
     h+=`<div style="font-size:11px;color:#86868b;overflow:hidden;text-overflow:ellipsis">${p&&p.email||uid}</div>`;
     h+='</div>';
     h+=`<button class="btn btn-sec btn-sm" onclick="setAdminEditUid('${isEditing?'':uid}')">${isEditing?'접기':'수정'}</button>`;
@@ -2371,6 +2513,31 @@ function renderAdminTab(){
       h+='</div>';
       // 전체 해제
       h+=`<button class="btn btn-sm" style="width:100%;background:#f5f5f7;color:#c62828;border:1px solid #ffcdd2" onclick="if(confirm('이름과 반 정보를 모두 해제할까요?')){adminUpdateUser('${uid}','teacherName','');adminUpdateUser('${uid}','homeroom','')}">이름/반 해제</button>`;
+      
+      // 승인 상태 관리
+      if(!ADMIN_EMAILS.includes(p&&p.email||"")){
+        h+='<div style="margin-top:8px;padding-top:8px;border-top:1px solid #f0f0f0">';
+        h+='<div style="font-size:11px;font-weight:700;color:#86868b;margin-bottom:4px">⏳ 승인 상태</div>';
+        const curStatus = p && p.status;
+        if(!curStatus || curStatus === "pending"){
+          h+=`<button class="btn btn-sm" style="width:100%;background:#2e7d32;margin-bottom:4px" onclick="adminApproveUser('${uid}')">✅ 승인</button>`;
+          h+=`<button class="btn btn-sm" style="width:100%;background:#fff;color:#c62828;border:1px solid #ef5350" onclick="adminRejectUser('${uid}')">🚫 거부</button>`;
+        } else if(curStatus === "approved"){
+          if(p.approvedAt){
+            h+=`<div style="font-size:10px;color:#2e7d32;margin-bottom:4px">✅ ${new Date(p.approvedAt).toLocaleString('ko-KR',{hour12:false})} 승인됨${p.approvedBy?' ('+p.approvedBy+')':''}</div>`;
+          }
+          if(!isSelf){
+            h+=`<button class="btn btn-sm" style="width:100%;background:#fff8e1;color:#e65100;border:1px solid #ffe082;margin-bottom:4px" onclick="adminUnapproveUser('${uid}')">⏳ 승인 해제</button>`;
+            h+=`<button class="btn btn-sm" style="width:100%;background:#fff;color:#c62828;border:1px solid #ef5350" onclick="adminRejectUser('${uid}')">🚫 거부</button>`;
+          }
+        } else if(curStatus === "rejected"){
+          if(p.rejectedAt){
+            h+=`<div style="font-size:10px;color:#c62828;margin-bottom:4px">🚫 ${new Date(p.rejectedAt).toLocaleString('ko-KR',{hour12:false})} 거부됨${p.rejectedBy?' ('+p.rejectedBy+')':''}</div>`;
+          }
+          h+=`<button class="btn btn-sm" style="width:100%;background:#2e7d32" onclick="adminApproveUser('${uid}')">✅ 승인으로 변경</button>`;
+        }
+        h+='</div>';
+      }
       
       // 비밀번호 관련
       h+='<div style="margin-top:8px;padding-top:8px;border-top:1px solid #f0f0f0">';
@@ -2474,6 +2641,60 @@ function renderLoadingScreen(){
   app.innerHTML = '<div class="auth-screen"><div class="auth-logo">🏫</div><div class="auth-title">통영고 교무 도우미</div><div class="auth-subtitle">로딩 중...</div></div>';
 }
 
+function renderPendingScreen(){
+  const app = document.getElementById('app');
+  let h = '<div class="auth-screen">';
+  h += '<div class="auth-logo">⏳</div>';
+  h += '<div class="auth-title">가입 승인 대기중</div>';
+  h += '<div class="auth-subtitle" style="line-height:1.6">관리자의 승인이 필요합니다</div>';
+  
+  h += '<div class="auth-card">';
+  h += `<div style="background:#fff8e1;color:#5d4037;padding:12px;border-radius:10px;font-size:12px;line-height:1.6;margin-bottom:12px">`;
+  h += `<b>📧 가입 이메일</b><br>${CURRENT_USER.email}<br><br>`;
+  h += `<b>⏳ 상태</b><br>관리자 승인 대기중<br><br>`;
+  h += `<b>📝 다음 단계</b><br>관리자(${ADMIN_EMAILS[0]})에게 본인 이메일로 가입했다고 알려주세요. 승인되면 앱을 사용할 수 있습니다.`;
+  h += `</div>`;
+  h += '<button class="auth-btn" onclick="checkApprovalStatus()">🔄 승인 상태 새로고침</button>';
+  h += '<button class="auth-btn auth-btn-secondary" onclick="handleSignOut()">로그아웃</button>';
+  h += '</div></div>';
+  app.innerHTML = h;
+}
+
+function renderRejectedScreen(){
+  const app = document.getElementById('app');
+  let h = '<div class="auth-screen">';
+  h += '<div class="auth-logo">🚫</div>';
+  h += '<div class="auth-title">가입 거부됨</div>';
+  h += '<div class="auth-subtitle">이 계정은 사용이 거부되었습니다</div>';
+  
+  h += '<div class="auth-card">';
+  h += `<div style="background:#ffebee;color:#c62828;padding:12px;border-radius:10px;font-size:12px;line-height:1.6;margin-bottom:12px">`;
+  h += `<b>📧 거부된 이메일</b><br>${CURRENT_USER.email}<br><br>`;
+  h += `문의사항이 있으시면 관리자에게 연락해주세요.<br>관리자: ${ADMIN_EMAILS[0]}`;
+  h += `</div>`;
+  h += '<button class="auth-btn" onclick="handleSignOut()">로그아웃</button>';
+  h += '</div></div>';
+  app.innerHTML = h;
+}
+
+async function checkApprovalStatus(){
+  if(!CURRENT_USER || !window.fb) return;
+  try{
+    const snap = await window.fb.get(`users/${CURRENT_USER.uid}`);
+    const profile = snap.val() || {};
+    const newStatus = ADMIN_EMAILS.includes(CURRENT_USER.email) ? "approved" : (profile.status || "pending");
+    if(newStatus !== APPROVAL_STATUS){
+      APPROVAL_STATUS = newStatus;
+      CURRENT_USER.status = newStatus;
+      render();
+    } else {
+      alert("아직 승인되지 않았습니다. 관리자에게 문의해주세요.");
+    }
+  }catch(e){
+    alert("상태 확인 실패: "+e.message);
+  }
+}
+
 function renderForceResetScreen(){
   const app = document.getElementById('app');
   let h = '<div class="auth-screen">';
@@ -2544,6 +2765,9 @@ function render(){
   // Auth gate
   if(AUTH_CHECKING){renderLoadingScreen();return}
   if(!CURRENT_USER){renderAuthScreen();return}
+  // Approval gate (before force reset, so rejected users can't reset and continue)
+  if(APPROVAL_STATUS === "rejected"){renderRejectedScreen();return}
+  if(APPROVAL_STATUS === "pending"){renderPendingScreen();return}
   if(FORCE_RESET_MODE){renderForceResetScreen();return}
   
   const app=document.getElementById('app');
