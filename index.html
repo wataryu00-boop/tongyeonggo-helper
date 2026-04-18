@@ -347,6 +347,7 @@ let CURRENT_USER = null; // {uid, email, teacherName, homeroom}
 let AUTH_MODE = "signin"; // "signin" | "signup" | "reset"
 let AUTH_CHECKING = true; // true until we know auth state
 let AUTH_ERROR = "";
+let FORCE_RESET_MODE = false; // true when user must reset password
 let ALL_USERS = {}; // {uid: {teacherName, homeroom, email, ...}} - all registered users
 
 // Admin config: email(s) of admin user(s)
@@ -465,9 +466,10 @@ function setupFirebase(){
     AUTH_CHECKING = false;
     if(user){
       // User is signed in, load their profile
+      let profile = {};
       try {
         const snap = await window.fb.get(`users/${user.uid}`);
-        const profile = snap.val() || {};
+        profile = snap.val() || {};
         CURRENT_USER = {
           uid: user.uid,
           email: user.email,
@@ -477,6 +479,8 @@ function setupFirebase(){
       } catch(e) {
         CURRENT_USER = {uid: user.uid, email: user.email, teacherName: null, homeroom: null};
       }
+      // Check forced password reset flag
+      FORCE_RESET_MODE = !!profile.forcePasswordReset;
       // Listen for record changes
       window.fb.onValue("overrides", (snapshot) => {
         const data = snapshot.val() || {};
@@ -484,15 +488,36 @@ function setupFirebase(){
         render();
       });
       // Listen for all users (for conflict detection and admin panel)
-      window.fb.onValue("users", (snapshot) => {
-        const data = snapshot.val() || {};
-        ALL_USERS = data;
-        // Update CURRENT_USER if own profile changed
-        if(CURRENT_USER && CURRENT_USER.uid && data[CURRENT_USER.uid]){
-          const p = data[CURRENT_USER.uid];
-          CURRENT_USER.teacherName = p.teacherName || null;
-          CURRENT_USER.homeroom = p.homeroom || null;
-        }
+      // If permission denied, fall back to just own profile
+      window.fb.get("users").then(snap => {
+        const canRead = true;
+        console.log("[교무도우미] users 전체 로드 성공");
+        window.fb.onValue("users", (snapshot) => {
+          const data = snapshot.val() || {};
+          ALL_USERS = data;
+          if(CURRENT_USER && CURRENT_USER.uid && data[CURRENT_USER.uid]){
+            const p = data[CURRENT_USER.uid];
+            CURRENT_USER.teacherName = p.teacherName || null;
+            CURRENT_USER.homeroom = p.homeroom || null;
+            // Sync force reset flag
+            FORCE_RESET_MODE = !!p.forcePasswordReset;
+          }
+          render();
+        });
+      }).catch(err => {
+        console.error("[교무도우미] users 전체 읽기 실패 - 규칙 확인 필요:", err.message);
+        window._usersReadError = err.message;
+        // Fallback: only subscribe to own profile
+        window.fb.onValue(`users/${user.uid}`, (snap) => {
+          const p = snap.val();
+          if(p && CURRENT_USER){
+            CURRENT_USER.teacherName = p.teacherName || null;
+            CURRENT_USER.homeroom = p.homeroom || null;
+            FORCE_RESET_MODE = !!p.forcePasswordReset;
+            ALL_USERS[CURRENT_USER.uid] = p;
+            render();
+          }
+        });
         render();
       });
     } else {
@@ -590,6 +615,8 @@ async function saveProfileField(field, value){
     if(value === null || value === "") delete updated[field];
     await window.fb.set(`users/${uid}`, updated);
     CURRENT_USER[field] = value;
+    // Also update local ALL_USERS to reflect immediately
+    ALL_USERS[uid] = updated;
     render();
     return true;
   }catch(e){
@@ -675,6 +702,12 @@ function showProfileSheet(){
   const adminBadge = isAdmin() ? '<span style="background:#ffc107;color:#5d4037;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;margin-left:4px">👑 관리자</span>' : '';
   
   let body = '';
+  
+  // 진단: users 읽기 권한 경고
+  if(window._usersReadError){
+    body += `<div class="auth-error" style="margin-bottom:12px"><b>⚠️ Firebase 보안 규칙 문제</b><br><br>전체 사용자 정보 읽기가 차단됐습니다. 이로 인해:<br>• 이름/반 충돌 감지가 작동하지 않습니다<br>• 관리자 탭에서 다른 사용자가 보이지 않습니다<br><br>관리자에게 Firebase Console → Realtime Database → 규칙에서 <b>users/.read</b>를 <b>auth != null</b>로 변경 요청하세요.</div>`;
+  }
+
   
   // 프로필 요약 카드
   body += '<div class="profile-card">';
@@ -2134,9 +2167,90 @@ async function adminUpdateUser(uid, field, value){
   }
 }
 
+async function adminDeleteUserProfile(uid){
+  if(!isAdmin()){alert("관리자 권한 필요");return}
+  if(uid === CURRENT_USER.uid){
+    alert("⚠️ 본인 계정은 이 기능으로 삭제할 수 없습니다\n\n본인 계정을 삭제하려면:\n1. 다른 관리자에게 요청하거나\n2. Firebase Console에서 직접 삭제하세요");
+    return;
+  }
+  const user = ALL_USERS[uid];
+  const label = (user && (user.teacherName || user.email)) || uid;
+  if(!confirm(`⚠️ ${label} 사용자의 프로필을 삭제합니다\n\n• 이름, 담임 반, 강제 재설정 플래그 등 모두 삭제됨\n• 해당 계정이 다시 로그인하면 프로필 미설정 상태\n• Firebase Auth 계정 자체는 남아있음 (Firebase Console에서 별도 삭제 필요)\n\n계속하시겠습니까?`)) return;
+  try{
+    await window.fb.remove(`users/${uid}`);
+    // Listener will update ALL_USERS, but also clear locally for immediate UI
+    delete ALL_USERS[uid];
+    ADMIN_EDIT_UID = null;
+    render();
+    alert(`✅ ${label}의 프로필이 삭제되었습니다`);
+  }catch(e){
+    alert("삭제 실패: "+e.message);
+  }
+}
+
+async function adminForcePasswordReset(uid){
+  if(!isAdmin()){alert("관리자 권한 필요");return}
+  if(uid === CURRENT_USER.uid){
+    alert("본인 계정에는 강제 재설정을 사용할 수 없습니다.\n프로필 > 비밀번호 변경을 이용하세요.");
+    return;
+  }
+  const user = ALL_USERS[uid];
+  const label = (user && (user.teacherName || user.email)) || uid;
+  if(!confirm(`🔒 ${label} 사용자에게 비밀번호 재설정을 강제합니다\n\n• 해당 사용자가 다음 접속 시 강제 재설정 화면이 표시됩니다\n• 재설정 완료 전까지 앱 사용 불가\n\n계속하시겠습니까?`)) return;
+  try{
+    const existing = ALL_USERS[uid] || {};
+    await window.fb.set(`users/${uid}`, {
+      ...existing,
+      forcePasswordReset: true,
+      forceResetBy: CURRENT_USER.email,
+      forceResetAt: new Date().toISOString()
+    });
+    alert(`✅ ${label}에게 비밀번호 강제 재설정이 적용되었습니다`);
+  }catch(e){
+    alert("적용 실패: "+e.message);
+  }
+}
+
+async function adminCancelForceReset(uid){
+  if(!isAdmin()){alert("관리자 권한 필요");return}
+  try{
+    const existing = ALL_USERS[uid] || {};
+    const updated = {...existing};
+    delete updated.forcePasswordReset;
+    delete updated.forceResetBy;
+    delete updated.forceResetAt;
+    await window.fb.set(`users/${uid}`, updated);
+  }catch(e){
+    alert("해제 실패: "+e.message);
+  }
+}
+
+async function adminSendResetEmail(uid){
+  if(!isAdmin()){alert("관리자 권한 필요");return}
+  const user = ALL_USERS[uid];
+  if(!user || !user.email){alert("이메일 정보가 없습니다");return}
+  if(!confirm(`📧 ${user.email}로 Firebase 비밀번호 재설정 메일을 발송합니다\n\n계속하시겠습니까?`)) return;
+  try{
+    await window.fb.resetPassword(user.email);
+    alert(`✅ ${user.email}로 재설정 메일을 보냈습니다`);
+  }catch(e){
+    alert("메일 발송 실패: "+e.message);
+  }
+}
+
 function renderAdminTab(){
   let h='';
   if(!isAdmin()){return `<div class="empty-state"><span class="emoji">🔒</span>관리자 권한이 필요합니다</div>`}
+  
+  // 진단: users 읽기 권한 경고
+  if(window._usersReadError){
+    h+='<div class="card" style="border-left:4px solid #c62828;background:#ffebee">';
+    h+='<div style="font-weight:700;color:#c62828;font-size:13px;margin-bottom:6px">⚠️ Firebase 보안 규칙 수정 필요</div>';
+    h+='<div style="font-size:11px;color:#5d4037;line-height:1.6">Firebase Console → Realtime Database → <b>규칙</b> 탭에서 아래처럼 변경하세요:</div>';
+    h+='<pre style="background:#fff;border:1px solid #ffcdd2;border-radius:6px;padding:8px;font-size:10px;overflow-x:auto;margin-top:6px">{\n  "rules": {\n    "overrides": {\n      ".read": "auth != null",\n      ".write": "auth != null"\n    },\n    "users": {\n      ".read": "auth != null",\n      ".write": "auth != null"\n    }\n  }\n}</pre>';
+    h+='<div style="font-size:10px;color:#86868b;margin-top:4px">오류: '+window._usersReadError+'</div>';
+    h+='</div>';
+  }
   
   const userList = Object.entries(ALL_USERS).sort((a,b)=>{
     // Sort by: teacherName > email
@@ -2146,10 +2260,11 @@ function renderAdminTab(){
   });
   
   // 요약
-  let withName=0, withHomeroom=0;
+  let withName=0, withHomeroom=0, needsReset=0;
   userList.forEach(([uid,p])=>{
     if(p&&p.teacherName)withName++;
     if(p&&p.homeroom)withHomeroom++;
+    if(p&&p.forcePasswordReset)needsReset++;
   });
   
   h+='<div class="card">';
@@ -2158,7 +2273,7 @@ function renderAdminTab(){
   h+=`<div class="stat-card"><div class="stat-num">${userList.length}</div><div class="stat-lbl">가입 교사</div></div>`;
   h+=`<div class="stat-card"><div class="stat-num">${withName}</div><div class="stat-lbl">이름 설정됨</div></div>`;
   h+=`<div class="stat-card"><div class="stat-num">${withHomeroom}</div><div class="stat-lbl">담임 설정됨</div></div>`;
-  h+=`<div class="stat-card"><div class="stat-num">${userList.length-withName}</div><div class="stat-lbl">이름 미설정</div></div>`;
+  h+=`<div class="stat-card" style="${needsReset>0?'background:#fff3e0;border:1px solid #ffb74d':''}"><div class="stat-num" style="${needsReset>0?'color:#e65100':''}">${needsReset}</div><div class="stat-lbl">🔒 재설정 대기</div></div>`;
   h+='</div></div>';
   
   // 중복/충돌 감지
@@ -2222,7 +2337,8 @@ function renderAdminTab(){
     h+=`<div style="background:#fff;border:2px solid ${borderColor};border-radius:10px;padding:10px 12px">`;
     h+='<div style="display:flex;justify-content:space-between;align-items:start;gap:8px">';
     h+='<div style="flex:1;min-width:0">';
-    h+=`<div style="font-size:13px;font-weight:700">${hasName?p.teacherName:'<span style="color:#c62828">이름 미설정</span>'}${hasHr?' · '+p.homeroom:''}${isSelf?' <span style="background:#ffc107;color:#5d4037;font-size:9px;padding:1px 5px;border-radius:4px">나</span>':''}${hasConflict?' <span style="background:#ffebee;color:#c62828;font-size:9px;padding:1px 5px;border-radius:4px">⚠️ 충돌</span>':''}</div>`;
+    const needsReset = p && p.forcePasswordReset;
+    h+=`<div style="font-size:13px;font-weight:700">${hasName?p.teacherName:'<span style="color:#c62828">이름 미설정</span>'}${hasHr?' · '+p.homeroom:''}${isSelf?' <span style="background:#ffc107;color:#5d4037;font-size:9px;padding:1px 5px;border-radius:4px">나</span>':''}${hasConflict?' <span style="background:#ffebee;color:#c62828;font-size:9px;padding:1px 5px;border-radius:4px">⚠️ 충돌</span>':''}${needsReset?' <span style="background:#fff3e0;color:#e65100;font-size:9px;padding:1px 5px;border-radius:4px">🔒 재설정대기</span>':''}</div>`;
     h+=`<div style="font-size:11px;color:#86868b;overflow:hidden;text-overflow:ellipsis">${p&&p.email||uid}</div>`;
     h+='</div>';
     h+=`<button class="btn btn-sec btn-sm" onclick="setAdminEditUid('${isEditing?'':uid}')">${isEditing?'접기':'수정'}</button>`;
@@ -2254,7 +2370,28 @@ function renderAdminTab(){
       h+=`<button class="btn btn-sm" style="width:100%;margin-top:6px" onclick="adminUpdateUser('${uid}','homeroom',document.getElementById('adminHr_${uid}').value)">반 저장</button>`;
       h+='</div>';
       // 전체 해제
-      h+=`<button class="btn btn-sm" style="width:100%;background:#f5f5f7;color:#c62828;border:1px solid #ffcdd2" onclick="if(confirm('이름과 반 정보를 모두 해제할까요?')){adminUpdateUser('${uid}','teacherName','');adminUpdateUser('${uid}','homeroom','')}">전체 해제</button>`;
+      h+=`<button class="btn btn-sm" style="width:100%;background:#f5f5f7;color:#c62828;border:1px solid #ffcdd2" onclick="if(confirm('이름과 반 정보를 모두 해제할까요?')){adminUpdateUser('${uid}','teacherName','');adminUpdateUser('${uid}','homeroom','')}">이름/반 해제</button>`;
+      
+      // 비밀번호 관련
+      h+='<div style="margin-top:8px;padding-top:8px;border-top:1px solid #f0f0f0">';
+      h+='<div style="font-size:11px;font-weight:700;color:#86868b;margin-bottom:4px">🔒 비밀번호 관리</div>';
+      if(p && p.forcePasswordReset){
+        h+=`<div style="background:#fff3e0;color:#e65100;padding:6px 8px;border-radius:6px;font-size:11px;margin-bottom:4px">⚠️ 강제 재설정 활성화됨${p.forceResetAt?'<br><span style=\"font-size:9px;opacity:.7\">설정일: '+new Date(p.forceResetAt).toLocaleString('ko-KR',{hour12:false})+'</span>':''}</div>`;
+        h+=`<button class="btn btn-sm" style="width:100%;background:#fff;color:#e65100;border:1px solid #ffcc80;margin-bottom:4px" onclick="adminCancelForceReset('${uid}')">강제 재설정 해제</button>`;
+      } else {
+        h+=`<button class="btn btn-sm" style="width:100%;background:#fff8e1;color:#5d4037;border:1px solid #ffe082;margin-bottom:4px" onclick="adminForcePasswordReset('${uid}')">🔒 비밀번호 강제 재설정</button>`;
+      }
+      h+=`<button class="btn btn-sm" style="width:100%;background:#e3f2fd;color:#1565c0;border:1px solid #90caf9" onclick="adminSendResetEmail('${uid}')">📧 재설정 메일 발송</button>`;
+      h+='</div>';
+      
+      // 프로필 삭제 (본인 제외)
+      if(!isSelf){
+        h+='<div style="margin-top:8px;padding-top:8px;border-top:1px solid #f0f0f0">';
+        h+=`<button class="btn btn-sm" style="width:100%;background:#ffebee;color:#c62828;border:1px solid #ef5350;font-weight:700" onclick="adminDeleteUserProfile('${uid}')">🗑️ 프로필 삭제</button>`;
+        h+='<div style="font-size:10px;color:#86868b;margin-top:4px;text-align:center">⚠️ Firebase Auth 계정은 Console에서 별도 삭제</div>';
+        h+='</div>';
+      }
+      
       h+='</div>';
     }
     h+='</div>';
@@ -2337,10 +2474,77 @@ function renderLoadingScreen(){
   app.innerHTML = '<div class="auth-screen"><div class="auth-logo">🏫</div><div class="auth-title">통영고 교무 도우미</div><div class="auth-subtitle">로딩 중...</div></div>';
 }
 
+function renderForceResetScreen(){
+  const app = document.getElementById('app');
+  let h = '<div class="auth-screen">';
+  h += '<div class="auth-logo">🔒</div>';
+  h += '<div class="auth-title">비밀번호 재설정 필요</div>';
+  h += '<div class="auth-subtitle" style="line-height:1.6">관리자가 비밀번호 재설정을 요청했습니다.<br>계속하시려면 새 비밀번호를 설정해주세요.</div>';
+  
+  h += '<div class="auth-card">';
+  h += '<div id="frError" class="auth-error" style="display:none"></div>';
+  h += '<div id="frSuccess" class="auth-success" style="display:none"></div>';
+  h += `<div style="background:#f0f4ff;color:#1a237e;padding:8px 12px;border-radius:8px;font-size:11px;margin-bottom:10px">📧 ${CURRENT_USER.email}</div>`;
+  h += '<input type="password" id="frCurrent" class="auth-input" placeholder="현재 비밀번호" autocomplete="current-password">';
+  h += '<input type="password" id="frNew" class="auth-input" placeholder="새 비밀번호 (6자 이상)" autocomplete="new-password">';
+  h += '<input type="password" id="frNew2" class="auth-input" placeholder="새 비밀번호 확인" autocomplete="new-password">';
+  h += '<button class="auth-btn" id="frBtn" onclick="submitForceReset()">🔒 비밀번호 변경 & 진입</button>';
+  h += '<button class="auth-btn auth-btn-secondary" onclick="handleSignOut()">로그아웃</button>';
+  h += '<div style="font-size:10px;color:#86868b;text-align:center;margin-top:10px">비밀번호를 모르시면 로그아웃 후 <b>비밀번호 재설정 메일</b>을 요청하세요</div>';
+  h += '</div></div>';
+  
+  app.innerHTML = h;
+  setTimeout(()=>{const e=document.getElementById('frCurrent');if(e)e.focus()},50);
+}
+
+async function submitForceReset(){
+  const cur = document.getElementById('frCurrent').value;
+  const nw = document.getElementById('frNew').value;
+  const nw2 = document.getElementById('frNew2').value;
+  const err = document.getElementById('frError');
+  const ok = document.getElementById('frSuccess');
+  err.style.display="none"; ok.style.display="none";
+  
+  if(!cur || !nw){err.textContent="모든 필드를 입력하세요";err.style.display="block";return}
+  if(nw.length < 6){err.textContent="새 비밀번호는 6자 이상이어야 합니다";err.style.display="block";return}
+  if(nw !== nw2){err.textContent="새 비밀번호가 일치하지 않습니다";err.style.display="block";return}
+  if(cur === nw){err.textContent="새 비밀번호가 현재와 같습니다";err.style.display="block";return}
+  
+  const btn = document.getElementById('frBtn');
+  btn.textContent = "변경 중..."; btn.disabled = true;
+  try{
+    await window.fb.updatePassword(cur, nw);
+    // Clear force reset flag
+    const existing = ALL_USERS[CURRENT_USER.uid] || {};
+    const cleared = {...existing};
+    delete cleared.forcePasswordReset;
+    delete cleared.forceResetBy;
+    delete cleared.forceResetAt;
+    cleared.passwordResetAt = new Date().toISOString();
+    await window.fb.set(`users/${CURRENT_USER.uid}`, cleared);
+    FORCE_RESET_MODE = false;
+    ok.textContent = "✅ 비밀번호가 변경되었습니다. 앱으로 진입합니다...";
+    ok.style.display = "block";
+    setTimeout(render, 800);
+  }catch(e){
+    const code = e.code || "";
+    let msg = "변경 실패: ";
+    if(code.includes("wrong-password") || code.includes("invalid-credential")) msg = "현재 비밀번호가 올바르지 않습니다";
+    else if(code.includes("weak-password")) msg = "새 비밀번호가 너무 약합니다";
+    else if(code.includes("requires-recent-login")) msg = "보안상 다시 로그인한 뒤 시도해주세요";
+    else msg += e.message;
+    err.textContent = msg;
+    err.style.display = "block";
+    btn.textContent = "🔒 비밀번호 변경 & 진입";
+    btn.disabled = false;
+  }
+}
+
 function render(){
   // Auth gate
   if(AUTH_CHECKING){renderLoadingScreen();return}
   if(!CURRENT_USER){renderAuthScreen();return}
+  if(FORCE_RESET_MODE){renderForceResetScreen();return}
   
   const app=document.getElementById('app');
   let h=renderTopbar();
