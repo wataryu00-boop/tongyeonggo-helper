@@ -356,6 +356,17 @@ const ADMIN_EMAILS = ["wataryu@hanmail.net"]; // 관리자 이메일
 function isAdmin(){
   return CURRENT_USER && ADMIN_EMAILS.includes(CURRENT_USER.email);
 }
+function isNightAdmin(){
+  // 야자 관리자: 시스템 관리자 OR users/{uid}.isNightAdmin === true
+  if(isAdmin()) return true;
+  if(!CURRENT_USER) return false;
+  const me = ALL_USERS[CURRENT_USER.uid];
+  return !!(me && me.isNightAdmin);
+}
+
+// 야자 상태
+let NIGHT_BASELINE = {}; // {월: "박효덕", 화: "...", ...}
+let NIGHT_OVERRIDES = {}; // {weekStart: {월: {teacher, reason, replacedBy}}}
 
 // Admin tab state
 let ADMIN_EDIT_UID = null;
@@ -528,6 +539,16 @@ function setupFirebase(){
       window.fb.onValue("overrides", (snapshot) => {
         const data = snapshot.val() || {};
         RECORDS = data;
+        render();
+      });
+      // Listen for night supervision baseline
+      window.fb.onValue("nightBaseline", (snapshot) => {
+        NIGHT_BASELINE = snapshot.val() || {};
+        render();
+      });
+      // Listen for night supervision overrides
+      window.fb.onValue("nightOverrides", (snapshot) => {
+        NIGHT_OVERRIDES = snapshot.val() || {};
         render();
       });
       // Listen for all users (for conflict detection and admin panel)
@@ -908,6 +929,7 @@ const NAV_PRIMARY=[
   {id:"analysis",icon:"📊",label:"분석"}
 ];
 const NAV_MORE=[
+  {id:"night",icon:"🌙",label:"야자 감독"},
   {id:"records",icon:"📝",label:"교체/대강 기록"},
   {id:"common",icon:"👥",label:"공통 공강"},
   {id:"room",icon:"🏫",label:"교실 현황"},
@@ -974,7 +996,7 @@ function deptCounts(){const c={"전체":T.length};T.forEach(t=>{c[t.d]=(c[t.d]||
 
 // ========== Renderers ==========
 function renderTopbar(){
-  let tabInfo={swap:{t:"수업 교체",s:"내 수업을 다른 교사와 바꾸거나 대강 찾기"},find:{t:"시간별 공강",s:"특정 시간 공강 교사 찾기"},common:{t:"공통 공강",s:"여러 교사 동시 공강 시간"},myclass:{t:"우리반",s:"학급 시간표 조회"},room:{t:"교실 현황",s:"교실별 사용 현황"},analysis:{t:"근무 분석",s:"교사별 시수·연강 통계"},heatmap:{t:"수업 밀도",s:"시간대별 수업량 분포"},event:{t:"행사 계산",s:"시험/행사 시수 변동 계산"},view:{t:"시간표 조회",s:"개별 교사 시간표"},records:{t:"교체/대강 기록",s:"날짜별 변경사항 관리"},admin:{t:"👑 관리자",s:"사용자 계정 관리"}};
+  let tabInfo={swap:{t:"수업 교체",s:"내 수업을 다른 교사와 바꾸거나 대강 찾기"},find:{t:"시간별 공강",s:"특정 시간 공강 교사 찾기"},common:{t:"공통 공강",s:"여러 교사 동시 공강 시간"},myclass:{t:"우리반",s:"학급 시간표 조회"},room:{t:"교실 현황",s:"교실별 사용 현황"},analysis:{t:"근무 분석",s:"교사별 시수·연강 통계"},heatmap:{t:"수업 밀도",s:"시간대별 수업량 분포"},event:{t:"행사 계산",s:"시험/행사 시수 변동 계산"},view:{t:"시간표 조회",s:"개별 교사 시간표"},records:{t:"교체/대강 기록",s:"날짜별 변경사항 관리"},admin:{t:"👑 관리자",s:"사용자 계정 관리"},night:{t:"🌙 야자 감독",s:"주간 감독표 조회 및 교체"}};
   const info=tabInfo[TAB]||{t:"교무도우미",s:""};
   const userBadge = CURRENT_USER && CURRENT_USER.teacherName 
     ? `<span style="background:#1a237e;color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;margin-right:4px">${CURRENT_USER.teacherName}</span>`
@@ -2614,6 +2636,284 @@ function renderAdminTab(){
   return h;
 }
 
+// ========== TAB: 야자 감독 ==========
+let NIGHT_EDIT_MODE = false; // baseline edit mode (admin only)
+let NIGHT_SWAP_SELECTED = null; // {weekStart, day} for swap target selection
+
+function toggleNightEdit(){NIGHT_EDIT_MODE=!NIGHT_EDIT_MODE;render()}
+function setNightSwapTarget(weekStart, day){
+  NIGHT_SWAP_SELECTED = {weekStart, day};
+  render();
+}
+function cancelNightSwap(){NIGHT_SWAP_SELECTED=null;render()}
+
+// 특정 주/요일의 실제 감독자 계산
+function getNightSupervisor(weekStart, day){
+  // Priority: override > baseline
+  if(NIGHT_OVERRIDES[weekStart] && NIGHT_OVERRIDES[weekStart][day]){
+    const ov = NIGHT_OVERRIDES[weekStart][day];
+    return {
+      teacher: ov.replacedBy || ov.teacher,
+      original: ov.originalTeacher || NIGHT_BASELINE[day] || null,
+      changed: true,
+      reason: ov.reason || "교체됨",
+      type: ov.type || "replaced"
+    };
+  }
+  return {
+    teacher: NIGHT_BASELINE[day] || null,
+    original: NIGHT_BASELINE[day] || null,
+    changed: false,
+    type: "baseline"
+  };
+}
+
+async function saveBaseline(day, teacherName){
+  if(!isNightAdmin()){alert("야자 관리자 권한이 필요합니다");return}
+  try{
+    if(!teacherName){
+      // Remove
+      const existing = {...NIGHT_BASELINE};
+      delete existing[day];
+      await window.fb.set("nightBaseline", existing);
+    } else {
+      await window.fb.set(`nightBaseline/${day}`, teacherName);
+    }
+  }catch(e){alert("저장 실패: "+e.message)}
+}
+
+async function saveNightSwap(weekStart, day, newTeacher, reason){
+  if(!CURRENT_USER){alert("로그인 필요");return}
+  const current = getNightSupervisor(weekStart, day);
+  const original = current.original || NIGHT_BASELINE[day] || null;
+  
+  // Permission: 야자 관리자는 모두 가능, 일반 교사는 본인 담당일 교체만 가능
+  const isMyShift = CURRENT_USER.teacherName && current.teacher === CURRENT_USER.teacherName;
+  if(!isNightAdmin() && !isMyShift){
+    alert("본인 담당일만 교체할 수 있습니다 (야자 관리자 문의)");
+    return;
+  }
+  
+  try{
+    await window.fb.set(`nightOverrides/${weekStart}/${day}`, {
+      teacher: current.teacher,
+      originalTeacher: original,
+      replacedBy: newTeacher,
+      reason: reason || "",
+      updatedAt: new Date().toISOString(),
+      updatedBy: CURRENT_USER.teacherName || CURRENT_USER.email,
+      updatedByUid: CURRENT_USER.uid
+    });
+    NIGHT_SWAP_SELECTED = null;
+    render();
+  }catch(e){alert("저장 실패: "+e.message)}
+}
+
+async function cancelNightOverride(weekStart, day){
+  if(!CURRENT_USER) return;
+  const current = getNightSupervisor(weekStart, day);
+  const isMyShift = CURRENT_USER.teacherName && (current.teacher === CURRENT_USER.teacherName || current.original === CURRENT_USER.teacherName);
+  if(!isNightAdmin() && !isMyShift){alert("권한이 없습니다");return}
+  if(!confirm("이 교체를 취소하고 원래 담당자로 되돌릴까요?"))return;
+  try{
+    await window.fb.remove(`nightOverrides/${weekStart}/${day}`);
+  }catch(e){alert("취소 실패: "+e.message)}
+}
+
+function renderNightTab(){
+  let h = '';
+  const weekStart = getWeekStart(VIEW_DATE);
+  const today = todayStr();
+  const todayWeek = getWeekStart(today);
+  const myName = CURRENT_USER ? CURRENT_USER.teacherName : null;
+  
+  // 헤더 + 권한 배지
+  h += '<div class="class-badge" style="margin-bottom:10px;background:linear-gradient(135deg,#1a237e 0%,#311b92 100%)">';
+  h += '<h3>🌙 야간 자율학습 감독</h3>';
+  h += `<div class="sub">${formatWeek(VIEW_DATE)}`;
+  if(isNightAdmin()) h += ' <span style="background:#ffc107;color:#5d4037;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;margin-left:4px">🗝️ 야자 관리자</span>';
+  h += '</div></div>';
+  
+  // 주 선택기
+  const weekOverrides = NIGHT_OVERRIDES[weekStart] || {};
+  const overrideCount = Object.keys(weekOverrides).length;
+  h += '<div class="card" style="padding:10px 12px;margin-bottom:8px">';
+  h += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">';
+  h += `<input type="date" value="${VIEW_DATE}" onchange="VIEW_DATE=this.value;render()" style="flex:1;min-width:140px;padding:6px 8px;border-radius:6px;border:1px solid #e5e5ea;font-size:12px;font-family:inherit">`;
+  h += `<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="VIEW_DATE=todayStr();render()">이번주</button>`;
+  h += `<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="const d=new Date(VIEW_DATE);d.setDate(d.getDate()-7);VIEW_DATE=d.toISOString().slice(0,10);render()">◀</button>`;
+  h += `<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="const d=new Date(VIEW_DATE);d.setDate(d.getDate()+7);VIEW_DATE=d.toISOString().slice(0,10);render()">▶</button>`;
+  h += '</div>';
+  if(overrideCount>0) h += `<div style="margin-top:6px"><span style="background:#e65100;color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700">이 주 교체 ${overrideCount}건</span></div>`;
+  h += '</div>';
+  
+  // 야자 관리자: 기본 감독표 편집 토글
+  if(isNightAdmin()){
+    h += `<button class="btn ${NIGHT_EDIT_MODE?'':'btn-outline'}" style="width:100%;margin-bottom:8px;font-size:13px" onclick="toggleNightEdit()">${NIGHT_EDIT_MODE?'✅ 편집 완료':'⚙️ 기본 감독표 편집'}</button>`;
+  }
+  
+  // Baseline 편집 모드
+  if(NIGHT_EDIT_MODE && isNightAdmin()){
+    h += '<div class="card" style="border-left:4px solid #ffc107;background:#fff8e1">';
+    h += '<div class="card-title" style="color:#e65100">⚙️ 기본 감독표 설정</div>';
+    h += '<div class="help-text" style="background:#fff;border-left-color:#ff9800">💡 요일별 기본 담당 교사를 설정합니다. 주간 교체가 없는 주에는 이 설정이 적용됩니다.</div>';
+    DAYS.forEach(d=>{
+      const cur = NIGHT_BASELINE[d] || "";
+      h += '<div style="margin-bottom:8px">';
+      h += `<div style="font-size:12px;font-weight:700;color:#1a237e;margin-bottom:4px">${d}요일</div>`;
+      h += '<div style="display:flex;gap:4px;align-items:center">';
+      h += `<input type="text" id="bl_${d}" value="${cur}" placeholder="담당 교사 이름" class="auth-input" style="flex:1;padding:8px 10px;font-size:13px;margin:0">`;
+      h += `<button class="btn btn-sm" onclick="saveBaseline('${d}',document.getElementById('bl_${d}').value.trim())">저장</button>`;
+      if(cur) h += `<button class="btn btn-sm btn-outline" onclick="if(confirm('${d}요일 기본 담당 해제?'))saveBaseline('${d}','')">해제</button>`;
+      h += '</div>';
+      // 교사 선택 pill
+      h += '<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px;max-height:80px;overflow-y:auto">';
+      T.forEach(t=>{
+        const active = t.n === cur;
+        h += `<button class="teacher-select-pill${active?' active':''}" onclick="saveBaseline('${d}','${t.n}')" style="font-size:10px;padding:3px 7px;min-height:22px">${t.n}</button>`;
+      });
+      h += '</div>';
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+  
+  // 주간 감독표 테이블
+  h += '<div class="card">';
+  h += '<div class="card-title">📋 이번 주 감독표</div>';
+  h += '<div class="help-text">🟠 변경된 날 · ⭐ 내 담당 · 본인 담당일은 "교체/대직 요청" 가능</div>';
+  
+  // 날짜별 카드
+  DAYS.forEach(d=>{
+    const date = dayCharToDate(weekStart, d);
+    const dateObj = new Date(date);
+    const isToday = date === today;
+    const isPast = date < today && weekStart <= todayWeek;
+    
+    const info = getNightSupervisor(weekStart, d);
+    const isMine = myName && info.teacher === myName;
+    const wasMine = myName && info.original === myName;
+    
+    let borderColor = info.changed ? "#e65100" : "#e5e5ea";
+    if(isToday) borderColor = "#1565c0";
+    let bgColor = "#fff";
+    if(isMine || wasMine) bgColor = "#fff8e1";
+    if(isPast) bgColor = "#f5f5f7";
+    
+    h += `<div style="background:${bgColor};border:2px solid ${borderColor};border-radius:12px;padding:12px;margin-bottom:8px;${isPast?'opacity:.6':''}">`;
+    
+    // 날짜 헤더
+    h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+    h += '<div>';
+    h += `<div style="font-size:13px;font-weight:700;color:#1a237e">${dateObj.getMonth()+1}/${dateObj.getDate()} (${d})`;
+    if(isToday) h += ' <span style="background:#1565c0;color:#fff;font-size:10px;padding:2px 7px;border-radius:8px;margin-left:4px">📍 오늘</span>';
+    if(isPast && !isToday) h += ' <span style="background:#9e9e9e;color:#fff;font-size:10px;padding:2px 7px;border-radius:8px;margin-left:4px">지난날</span>';
+    h += '</div>';
+    h += '</div>';
+    if(info.changed) h += '<span style="background:#e65100;color:#fff;font-size:10px;padding:2px 7px;border-radius:8px;font-weight:700">🔄 교체됨</span>';
+    h += '</div>';
+    
+    // 감독자 표시
+    if(!info.teacher){
+      h += '<div style="padding:10px;background:#ffebee;color:#c62828;border-radius:8px;font-size:12px;text-align:center">⚠️ 미배정 (야자 관리자에게 문의)</div>';
+    } else {
+      h += '<div style="font-size:18px;font-weight:800;color:#1a237e">';
+      if(info.changed){
+        h += `<span style="text-decoration:line-through;opacity:.5;font-weight:400;font-size:13px">${info.original}</span> → `;
+      }
+      h += `${info.teacher}`;
+      if(isMine) h += ' <span style="background:#ffc107;color:#5d4037;font-size:11px;padding:2px 8px;border-radius:8px;margin-left:4px">⭐ 나</span>';
+      h += '</div>';
+      if(info.changed && info.reason){
+        h += `<div style="font-size:11px;color:#86868b;margin-top:4px">사유: ${info.reason}</div>`;
+      }
+    }
+    
+    // 액션 버튼들 (지난날 제외)
+    if(!isPast){
+      const canEdit = isNightAdmin() || isMine || wasMine;
+      const selected = NIGHT_SWAP_SELECTED && NIGHT_SWAP_SELECTED.weekStart === weekStart && NIGHT_SWAP_SELECTED.day === d;
+      
+      if(canEdit){
+        h += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #f0f0f0">';
+        
+        if(selected){
+          // 교체 입력 UI
+          h += '<div style="background:#f0f4ff;border-radius:8px;padding:10px">';
+          h += `<div style="font-size:12px;font-weight:700;color:#1a237e;margin-bottom:6px">📝 대직/교체 입력</div>`;
+          h += `<input type="text" id="nswap_teacher" placeholder="새 담당 교사 (이름)" class="auth-input" style="padding:8px 10px;font-size:13px;margin-bottom:6px">`;
+          h += `<input type="text" id="nswap_reason" placeholder="사유 (선택)" class="auth-input" style="padding:8px 10px;font-size:13px;margin-bottom:6px">`;
+          h += '<div style="display:flex;flex-wrap:wrap;gap:3px;max-height:90px;overflow-y:auto;margin-bottom:8px">';
+          T.forEach(t=>{
+            if(t.n === info.teacher) return;
+            h += `<button class="teacher-select-pill" onclick="document.getElementById('nswap_teacher').value='${t.n}'" style="font-size:10px;padding:3px 7px;min-height:22px">${t.n}</button>`;
+          });
+          h += '</div>';
+          h += '<div style="display:flex;gap:6px">';
+          h += `<button class="btn btn-sm" style="flex:1" onclick="saveNightSwap('${weekStart}','${d}',document.getElementById('nswap_teacher').value.trim(),document.getElementById('nswap_reason').value.trim())">💾 저장</button>`;
+          h += `<button class="btn btn-sm btn-outline" onclick="cancelNightSwap()">취소</button>`;
+          h += '</div></div>';
+        } else {
+          h += '<div style="display:flex;gap:6px">';
+          h += `<button class="btn btn-sm" style="flex:1;background:#fff3e0;color:#e65100;border:1px solid #ffb74d" onclick="setNightSwapTarget('${weekStart}','${d}')">${info.changed?'🔄 재교체':'🔄 교체/대직 요청'}</button>`;
+          if(info.changed && canEdit){
+            h += `<button class="btn btn-sm btn-outline" onclick="cancelNightOverride('${weekStart}','${d}')">↩️ 원복</button>`;
+          }
+          h += '</div>';
+          if(!isNightAdmin() && !isMine && !wasMine){
+            h += '<div style="font-size:10px;color:#86868b;margin-top:4px;text-align:center">(본인 담당일만 교체 가능)</div>';
+          }
+        }
+        h += '</div>';
+      }
+    }
+    
+    h += '</div>';
+  });
+  
+  h += '</div>';
+  
+  // 야자 관리자 배정 (시스템 관리자만)
+  if(isAdmin()){
+    h += '<div class="card" style="margin-top:10px">';
+    h += '<div class="card-title">🗝️ 야자 관리자 배정</div>';
+    h += '<div class="help-text">👑 시스템 관리자 전용 · 야자 관리자는 기본 감독표를 편집하고 모든 교체 권한을 가집니다</div>';
+    const nightAdmins = Object.entries(ALL_USERS).filter(([uid,p]) => p && p.isNightAdmin);
+    if(nightAdmins.length > 0){
+      h += '<div style="margin-bottom:8px">';
+      h += '<div style="font-size:11px;font-weight:700;color:#86868b;margin-bottom:4px">현재 야자 관리자</div>';
+      nightAdmins.forEach(([uid,p])=>{
+        const label = p.teacherName || p.email;
+        h += `<div style="display:inline-flex;align-items:center;gap:4px;background:#fff8e1;padding:4px 10px;border-radius:10px;margin-right:4px;margin-bottom:4px;font-size:12px">🗝️ ${label} <button onclick="toggleNightAdminFor('${uid}',false)" style="background:transparent;border:none;color:#c62828;cursor:pointer;font-size:12px;padding:0 2px">✕</button></div>`;
+      });
+      h += '</div>';
+    }
+    h += '<div style="font-size:11px;font-weight:700;color:#86868b;margin-bottom:4px">사용자 목록에서 추가</div>';
+    h += '<div style="display:flex;flex-wrap:wrap;gap:3px;max-height:180px;overflow-y:auto">';
+    Object.entries(ALL_USERS).forEach(([uid,p])=>{
+      if(!p || p.isNightAdmin) return;
+      if(p.status !== "approved" && !ADMIN_EMAILS.includes(p.email)) return;
+      const label = p.teacherName || p.email;
+      h += `<button class="teacher-select-pill" onclick="toggleNightAdminFor('${uid}',true)" style="font-size:11px">${label}</button>`;
+    });
+    h += '</div>';
+    h += '</div>';
+  }
+  
+  return h;
+}
+
+async function toggleNightAdminFor(uid, value){
+  if(!isAdmin()){alert("시스템 관리자 권한 필요");return}
+  try{
+    const existing = ALL_USERS[uid] || {};
+    const updated = {...existing};
+    if(value) updated.isNightAdmin = true;
+    else delete updated.isNightAdmin;
+    await window.fb.set(`users/${uid}`, updated);
+  }catch(e){alert("변경 실패: "+e.message)}
+}
+
 // ========== Main Render ==========
 function renderAuthScreen(){
   const app = document.getElementById('app');
@@ -2839,6 +3139,7 @@ function render(){
   else if(TAB==="event")h+=renderEventTab();
   else if(TAB==="view")h+=renderViewTab();
   else if(TAB==="records")h+=renderRecordsTab();
+  else if(TAB==="night")h+=renderNightTab();
   else if(TAB==="admin" && isAdmin())h+=renderAdminTab();
   else if(TAB==="admin" && !isAdmin())h+=`<div class="empty-state"><span class="emoji">🔒</span>관리자 권한이 필요합니다</div>`;
   h+='</div>';
