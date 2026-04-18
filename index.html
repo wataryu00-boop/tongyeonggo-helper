@@ -2731,7 +2731,13 @@ async function saveBaseline(grade, day, slot, teacherName){
     } else {
       await window.fb.set(`nightBaseline/${grade}/${day}/${slot}`, teacherName);
     }
-  }catch(e){alert("저장 실패: "+e.message)}
+  }catch(e){
+    if(e.message && e.message.includes("PERMISSION_DENIED")){
+      alert("⚠️ Firebase 보안 규칙 문제\n\n야자 감독 데이터에 쓰기 권한이 없습니다.\n\n관리자(" + ADMIN_EMAILS[0] + ")에게 Firebase Console의 Realtime Database 규칙에 nightBaseline과 nightOverrides 경로를 추가해달라고 요청하세요.");
+    } else {
+      alert("저장 실패: "+e.message);
+    }
+  }
 }
 
 async function saveNightSwap(weekStart, grade, day, slot, newTeacher, reason){
@@ -2761,7 +2767,13 @@ async function saveNightSwap(weekStart, grade, day, slot, newTeacher, reason){
     });
     NIGHT_SWAP_TARGET = null;
     render();
-  }catch(e){alert("저장 실패: "+e.message)}
+  }catch(e){
+    if(e.message && e.message.includes("PERMISSION_DENIED")){
+      alert("⚠️ Firebase 보안 규칙 문제\n\n야자 감독 데이터에 쓰기 권한이 없습니다.\n\n관리자(" + ADMIN_EMAILS[0] + ")에게 nightBaseline과 nightOverrides 경로를 규칙에 추가해달라고 요청하세요.");
+    } else {
+      alert("저장 실패: "+e.message);
+    }
+  }
 }
 
 async function cancelNightOverride(weekStart, grade, day, slot){
