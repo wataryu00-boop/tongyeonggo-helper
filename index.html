@@ -258,7 +258,7 @@ table.tt{border-collapse:separate;border-spacing:2px;width:100%;table-layout:fix
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, push, onValue, set, remove, get, child } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDzBnbUtsGSdKqFsML9BbEA8iI3syY1MFg",
@@ -289,7 +289,14 @@ window.fb = {
   signOut: () => signOut(auth),
   onAuthChange: (callback) => onAuthStateChanged(auth, callback),
   resetPassword: (email) => sendPasswordResetEmail(auth, email),
-  currentUser: () => auth.currentUser
+  currentUser: () => auth.currentUser,
+  updatePassword: async (currentPassword, newPassword) => {
+    const user = auth.currentUser;
+    if(!user) throw new Error("로그인이 필요합니다");
+    const credential = EmailAuthProvider.credential(user.email, currentPassword);
+    await reauthenticateWithCredential(user, credential);
+    return updatePassword(user, newPassword);
+  }
 };
 
 // Dispatch ready event
@@ -325,7 +332,8 @@ let TAB="swap",ME=null,SEL=null,SEARCH="",DP=null,MULTI=[],DEPT_FILTER="전체";
 let ROOM=null,ANALYSIS_SORT="hours",EVENT_DAYS=[],EVENT_PERIODS=[];
 let VIEW_MODE="class",SELECTED_STUDENT=null,SELECTED_GROUP=null;
 let VIEWED_CLASS="2-10"; // which class to view in myclass tab
-function setViewedClass(c){VIEWED_CLASS=c;VIEW_MODE="class";SELECTED_STUDENT=null;SELECTED_GROUP=null;render()}
+let VIEWED_CLASS_EXPLICIT = false; // true if user manually picked; false means follow homeroom
+function setViewedClass(c){VIEWED_CLASS=c;VIEWED_CLASS_EXPLICIT=true;VIEW_MODE="class";SELECTED_STUDENT=null;SELECTED_GROUP=null;render()}
 let SHEET_OPEN=false,SHEET_CONTENT="";
 let MORE_OPEN=false;
 
@@ -335,10 +343,20 @@ let VIEW_DATE = new Date().toISOString().slice(0,10); // YYYY-MM-DD
 let FB_READY = false;
 
 // Auth state
-let CURRENT_USER = null; // {uid, email, teacherName}
+let CURRENT_USER = null; // {uid, email, teacherName, homeroom}
 let AUTH_MODE = "signin"; // "signin" | "signup" | "reset"
 let AUTH_CHECKING = true; // true until we know auth state
 let AUTH_ERROR = "";
+let ALL_USERS = {}; // {uid: {teacherName, homeroom, email, ...}} - all registered users
+
+// Admin config: email(s) of admin user(s)
+const ADMIN_EMAILS = ["wataryu@hanmail.net"]; // 관리자 이메일
+function isAdmin(){
+  return CURRENT_USER && ADMIN_EMAILS.includes(CURRENT_USER.email);
+}
+
+// Admin tab state
+let ADMIN_EDIT_UID = null;
 
 // Helpers for date
 function todayStr(){return new Date().toISOString().slice(0,10)}
@@ -453,20 +471,34 @@ function setupFirebase(){
         CURRENT_USER = {
           uid: user.uid,
           email: user.email,
-          teacherName: profile.teacherName || null
+          teacherName: profile.teacherName || null,
+          homeroom: profile.homeroom || null
         };
       } catch(e) {
-        CURRENT_USER = {uid: user.uid, email: user.email, teacherName: null};
+        CURRENT_USER = {uid: user.uid, email: user.email, teacherName: null, homeroom: null};
       }
-      // Listen for record changes (only when logged in)
+      // Listen for record changes
       window.fb.onValue("overrides", (snapshot) => {
         const data = snapshot.val() || {};
         RECORDS = data;
         render();
       });
+      // Listen for all users (for conflict detection and admin panel)
+      window.fb.onValue("users", (snapshot) => {
+        const data = snapshot.val() || {};
+        ALL_USERS = data;
+        // Update CURRENT_USER if own profile changed
+        if(CURRENT_USER && CURRENT_USER.uid && data[CURRENT_USER.uid]){
+          const p = data[CURRENT_USER.uid];
+          CURRENT_USER.teacherName = p.teacherName || null;
+          CURRENT_USER.homeroom = p.homeroom || null;
+        }
+        render();
+      });
     } else {
       CURRENT_USER = null;
       RECORDS = {};
+      ALL_USERS = {};
     }
     render();
   });
@@ -520,19 +552,105 @@ async function handleResetPassword(email){
   }
 }
 
-async function saveProfile(teacherName){
-  if(!CURRENT_USER) return;
+// Check if teacherName or homeroom is already used by another user
+function checkProfileConflict(field, value, excludeUid){
+  if(!value) return null;
+  for(const [uid, profile] of Object.entries(ALL_USERS)){
+    if(uid === excludeUid) continue;
+    if(!profile) continue;
+    if(profile[field] === value){
+      return {uid, email: profile.email, teacherName: profile.teacherName};
+    }
+  }
+  return null;
+}
+
+async function saveProfileField(field, value){
+  if(!CURRENT_USER){alert("로그인이 필요합니다");return}
+  const uid = CURRENT_USER.uid;
+  
+  // Check for conflict (only for teacherName and homeroom)
+  if((field === "teacherName" || field === "homeroom") && value){
+    const conflict = checkProfileConflict(field, value, uid);
+    if(conflict){
+      const fieldLabel = field === "teacherName" ? "이름" : "담임 반";
+      alert(`⚠️ 충돌 감지\n\n이 ${fieldLabel}(${value})은(는) 이미 다른 계정(${conflict.email})이 사용 중입니다.\n\n본인이 맞다면 관리자에게 문의해주세요.\n관리자: ${ADMIN_EMAILS[0]}`);
+      return false;
+    }
+  }
+  
   try{
-    await window.fb.set(`users/${CURRENT_USER.uid}`, {
-      teacherName,
+    const existing = ALL_USERS[uid] || {};
+    const updated = {
+      ...existing,
+      [field]: value,
       email: CURRENT_USER.email,
       updatedAt: new Date().toISOString()
-    });
-    CURRENT_USER.teacherName = teacherName;
-    closeSheet();
+    };
+    if(value === null || value === "") delete updated[field];
+    await window.fb.set(`users/${uid}`, updated);
+    CURRENT_USER[field] = value;
     render();
+    return true;
   }catch(e){
     alert("저장 실패: "+e.message);
+    return false;
+  }
+}
+
+// Wrapper for teacher name (called from profile sheet chip)
+async function saveProfile(teacherName){
+  const ok = await saveProfileField("teacherName", teacherName);
+  if(ok){
+    // Re-render profile sheet to show updated state
+    showProfileSheet();
+  }
+}
+
+async function saveHomeroom(classKey){
+  // classKey can be "2-10" or "" (to unset)
+  const ok = await saveProfileField("homeroom", classKey || null);
+  if(ok){
+    showProfileSheet();
+  }
+}
+
+// Password change handler
+async function handleChangePassword(){
+  const currentPw = document.getElementById('currentPassword').value;
+  const newPw = document.getElementById('newPassword').value;
+  const newPw2 = document.getElementById('newPassword2').value;
+  const errEl = document.getElementById('pwError');
+  const okEl = document.getElementById('pwSuccess');
+  errEl.style.display = "none"; okEl.style.display = "none";
+  
+  if(!currentPw || !newPw){errEl.textContent="모든 필드를 입력하세요";errEl.style.display="block";return}
+  if(newPw.length < 6){errEl.textContent="새 비밀번호는 6자 이상이어야 합니다";errEl.style.display="block";return}
+  if(newPw !== newPw2){errEl.textContent="새 비밀번호가 일치하지 않습니다";errEl.style.display="block";return}
+  if(currentPw === newPw){errEl.textContent="새 비밀번호가 현재와 같습니다";errEl.style.display="block";return}
+  
+  const btn = document.getElementById('pwChangeBtn');
+  btn.textContent = "변경 중..."; btn.disabled = true;
+  try{
+    await window.fb.updatePassword(currentPw, newPw);
+    okEl.textContent = "✅ 비밀번호가 변경되었습니다";
+    okEl.style.display = "block";
+    document.getElementById('currentPassword').value = "";
+    document.getElementById('newPassword').value = "";
+    document.getElementById('newPassword2').value = "";
+    btn.textContent = "🔒 비밀번호 변경";
+    btn.disabled = false;
+  }catch(e){
+    const code = e.code || "";
+    let msg = "비밀번호 변경 실패: ";
+    if(code.includes("wrong-password") || code.includes("invalid-credential")) msg = "현재 비밀번호가 올바르지 않습니다";
+    else if(code.includes("weak-password")) msg = "새 비밀번호가 너무 약합니다";
+    else if(code.includes("requires-recent-login")) msg = "보안을 위해 다시 로그인 후 시도해주세요";
+    else msg += e.message;
+    errEl.textContent = msg;
+    errEl.style.display = "block";
+    btn.textContent = "🔒 비밀번호 변경";
+    btn.disabled = false;
   }
 }
 
@@ -549,30 +667,86 @@ function translateAuthError(e){
   return e.message || "로그인 실패";
 }
 
-// Show profile sheet (for setting teacher name)
+// Show profile sheet (comprehensive: name, homeroom, password)
 function showProfileSheet(){
-  if(!CURRENT_USER){
-    alert("로그인이 필요합니다");return;
-  }
+  if(!CURRENT_USER){alert("로그인이 필요합니다");return}
   const myName = CURRENT_USER.teacherName;
-  let body = '';
-  body += `<div class="profile-card">`;
-  body += `<div class="profile-row"><span class="profile-label">📧 이메일</span><span class="profile-value">${CURRENT_USER.email}</span></div>`;
-  body += `<div class="profile-row"><span class="profile-label">👤 교사 이름</span><span class="profile-value">${myName || "<span style=\"color:#c62828\">미설정</span>"}</span></div>`;
-  body += `</div>`;
+  const myHomeroom = CURRENT_USER.homeroom;
+  const adminBadge = isAdmin() ? '<span style="background:#ffc107;color:#5d4037;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;margin-left:4px">👑 관리자</span>' : '';
   
-  body += '<div style="margin-bottom:14px">';
-  body += '<div style="font-size:13px;font-weight:700;margin-bottom:8px">본인 이름 선택</div>';
+  let body = '';
+  
+  // 프로필 요약 카드
+  body += '<div class="profile-card">';
+  body += `<div class="profile-row"><span class="profile-label">📧 이메일</span><span class="profile-value">${CURRENT_USER.email}${adminBadge}</span></div>`;
+  body += `<div class="profile-row"><span class="profile-label">👤 이름</span><span class="profile-value">${myName || '<span style="color:#c62828">미설정</span>'}</span></div>`;
+  body += `<div class="profile-row"><span class="profile-label">🎯 담임 반</span><span class="profile-value">${myHomeroom || '<span style="color:#86868b">없음</span>'}</span></div>`;
+  body += '</div>';
+  
+  // 섹션 1: 이름 선택
+  body += '<details open style="margin-bottom:10px"><summary style="font-size:13px;font-weight:700;padding:8px 0;cursor:pointer;color:#1a237e">👤 이름 변경 / 설정</summary>';
+  body += '<div style="padding:4px 0">';
   body += '<input type="text" id="teacherSearch" class="auth-input" placeholder="🔍 이름 검색..." oninput="filterTeacherList(this.value)" style="margin-bottom:8px">';
-  body += '<div id="teacherPillList" style="display:flex;flex-wrap:wrap;gap:5px;max-height:260px;overflow-y:auto;padding:4px">';
+  body += '<div id="teacherPillList" style="display:flex;flex-wrap:wrap;gap:5px;max-height:220px;overflow-y:auto;padding:4px">';
   T.forEach(t=>{
     const active = t.n === myName;
-    body += `<button class="teacher-select-pill${active?" active":""}" data-tname="${t.n}" onclick="saveProfile('${t.n}')">${t.n}<span style="font-size:10px;opacity:.7;margin-left:2px">${t.d}</span></button>`;
+    // Check if this name is taken by another user
+    const conflict = Object.entries(ALL_USERS).find(([uid,p]) => uid !== CURRENT_USER.uid && p && p.teacherName === t.n);
+    let style = "";
+    let title = "";
+    if(conflict){
+      style = "opacity:.5;border-color:#c62828;background:#ffebee";
+      title = `이미 ${conflict[1].email}이 사용 중`;
+    }
+    body += `<button class="teacher-select-pill${active?" active":""}" data-tname="${t.n}" onclick="saveProfile('${t.n}')" style="${style}" title="${title}">${t.n}<span style="font-size:10px;opacity:.7;margin-left:2px">${t.d}</span></button>`;
   });
-  body += '</div></div>';
+  body += '</div></div></details>';
   
-  body += '<button class="auth-btn" onclick="handleSignOut()" style="background:#c62828">🚪 로그아웃</button>';
-  body += '<div style="font-size:10px;color:#86868b;text-align:center;margin-top:8px">이름을 선택하면 자동으로 저장됩니다</div>';
+  // 섹션 2: 담임 반 선택
+  body += '<details style="margin-bottom:10px"><summary style="font-size:13px;font-weight:700;padding:8px 0;cursor:pointer;color:#1a237e">🎯 담임 반 설정</summary>';
+  body += '<div style="padding:4px 0">';
+  body += '<div style="font-size:11px;color:#86868b;margin-bottom:8px">담임 반을 선택하면 우리반 탭이 자동으로 해당 반으로 설정됩니다</div>';
+  
+  // 선택 해제 버튼
+  body += `<button class="teacher-select-pill${!myHomeroom?" active":""}" onclick="saveHomeroom('')" style="margin-bottom:6px">담임 아님</button>`;
+  body += '<div style="margin-top:6px">';
+  [1,2,3].forEach(g=>{
+    body += `<div style="margin-bottom:6px"><b style="font-size:11px;color:#1a237e">${g}학년</b><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">`;
+    const classes = Object.keys(ALL_CLASSES).filter(c => c.startsWith(g+'-')).sort((a,b)=>parseInt(a.split('-')[1])-parseInt(b.split('-')[1]));
+    classes.forEach(c => {
+      const active = myHomeroom === c;
+      const conflict = Object.entries(ALL_USERS).find(([uid,p]) => uid !== CURRENT_USER.uid && p && p.homeroom === c);
+      let style = "";
+      let title = "";
+      if(conflict){
+        style = "opacity:.5;border-color:#c62828;background:#ffebee";
+        title = `이미 ${conflict[1].teacherName || conflict[1].email} 선생님이 사용 중`;
+      }
+      body += `<button class="teacher-select-pill${active?" active":""}" onclick="saveHomeroom('${c}')" style="${style}" title="${title}">${c.split('-')[1]}반</button>`;
+    });
+    body += '</div></div>';
+  });
+  body += '</div></div></details>';
+  
+  // 섹션 3: 비밀번호 변경
+  body += '<details style="margin-bottom:10px"><summary style="font-size:13px;font-weight:700;padding:8px 0;cursor:pointer;color:#1a237e">🔒 비밀번호 변경</summary>';
+  body += '<div style="padding:4px 0">';
+  body += '<div id="pwError" class="auth-error" style="display:none"></div>';
+  body += '<div id="pwSuccess" class="auth-success" style="display:none"></div>';
+  body += '<input type="password" id="currentPassword" class="auth-input" placeholder="현재 비밀번호" autocomplete="current-password">';
+  body += '<input type="password" id="newPassword" class="auth-input" placeholder="새 비밀번호 (6자 이상)" autocomplete="new-password">';
+  body += '<input type="password" id="newPassword2" class="auth-input" placeholder="새 비밀번호 확인" autocomplete="new-password">';
+  body += '<button class="auth-btn" id="pwChangeBtn" onclick="handleChangePassword()" style="margin-top:0">🔒 비밀번호 변경</button>';
+  body += '</div></details>';
+  
+  // 섹션 4: 관리자 전용 안내
+  if(isAdmin()){
+    body += '<div style="background:#fff8e1;border:1px solid #ffc107;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#5d4037"><b>👑 관리자 계정</b><br>더보기 메뉴 → <b>관리자</b> 탭에서 모든 사용자 관리 가능</div>';
+  }
+  
+  // 로그아웃
+  body += '<button class="auth-btn" onclick="handleSignOut()" style="background:#c62828;margin-top:10px">🚪 로그아웃</button>';
+  body += '<div style="font-size:10px;color:#86868b;text-align:center;margin-top:8px">⚠️ 빨간 배경은 이미 다른 계정이 사용 중</div>';
   
   openSheet('👤 내 프로필', body);
 }
@@ -691,7 +865,7 @@ function deptCounts(){const c={"전체":T.length};T.forEach(t=>{c[t.d]=(c[t.d]||
 
 // ========== Renderers ==========
 function renderTopbar(){
-  let tabInfo={swap:{t:"수업 교체",s:"내 수업을 다른 교사와 바꾸거나 대강 찾기"},find:{t:"시간별 공강",s:"특정 시간 공강 교사 찾기"},common:{t:"공통 공강",s:"여러 교사 동시 공강 시간"},myclass:{t:"우리반",s:"2학년 10반 관리"},room:{t:"교실 현황",s:"교실별 사용 현황"},analysis:{t:"근무 분석",s:"교사별 시수·연강 통계"},heatmap:{t:"수업 밀도",s:"시간대별 수업량 분포"},event:{t:"행사 계산",s:"시험/행사 시수 변동 계산"},view:{t:"시간표 조회",s:"개별 교사 시간표"},records:{t:"교체/대강 기록",s:"날짜별 변경사항 관리"}};
+  let tabInfo={swap:{t:"수업 교체",s:"내 수업을 다른 교사와 바꾸거나 대강 찾기"},find:{t:"시간별 공강",s:"특정 시간 공강 교사 찾기"},common:{t:"공통 공강",s:"여러 교사 동시 공강 시간"},myclass:{t:"우리반",s:"학급 시간표 조회"},room:{t:"교실 현황",s:"교실별 사용 현황"},analysis:{t:"근무 분석",s:"교사별 시수·연강 통계"},heatmap:{t:"수업 밀도",s:"시간대별 수업량 분포"},event:{t:"행사 계산",s:"시험/행사 시수 변동 계산"},view:{t:"시간표 조회",s:"개별 교사 시간표"},records:{t:"교체/대강 기록",s:"날짜별 변경사항 관리"},admin:{t:"👑 관리자",s:"사용자 계정 관리"}};
   const info=tabInfo[TAB]||{t:"교무도우미",s:""};
   const userBadge = CURRENT_USER && CURRENT_USER.teacherName 
     ? `<span style="background:#1a237e;color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;margin-right:4px">${CURRENT_USER.teacherName}</span>`
@@ -713,11 +887,17 @@ function renderBottomNav(){
 
 function renderMoreMenu(){
   let h='';
-  NAV_MORE.forEach(n=>{
-    const active=TAB===n.id;
-    h+=`<button class="${active?'active':''}" onclick="setTab('${n.id}')"><span class="icon">${n.icon}</span>${n.label}</button>`;
-  });
+  NAV_MORE.forEach(n=>{h+=renderMoreMenuItem(n)});
+  // Admin tab (conditional)
+  if(isAdmin()){
+    h+=renderMoreMenuItem({id:"admin",icon:"👑",label:"관리자"});
+  }
   return h;
+}
+
+function renderMoreMenuItem(n){
+  const active=TAB===n.id;
+  return `<button class="${active?'active':''}" onclick="setTab('${n.id}')"><span class="icon">${n.icon}</span>${n.label}</button>`;
 }
 
 function renderSearchAndTeachers(onSelect,activeIdx){
@@ -1394,6 +1574,10 @@ function renderCommonTab(){
 
 // ========== TAB: 우리반 ==========
 function renderMyClassTab(){
+  // Auto-set VIEWED_CLASS to user's homeroom (once, if not explicitly set)
+  if(!VIEWED_CLASS_EXPLICIT && CURRENT_USER && CURRENT_USER.homeroom && ALL_CLASSES[CURRENT_USER.homeroom]){
+    VIEWED_CLASS = CURRENT_USER.homeroom;
+  }
   let h='';
   const weekStart = getWeekStart(VIEW_DATE);
   const weekCount = (RECORDS[weekStart] && Object.keys(RECORDS[weekStart]).length) || 0;
@@ -1408,21 +1592,25 @@ function renderMyClassTab(){
   
   // Header with class picker
   const cls = VIEWED_CLASS;
-  const isMyHomeroom = cls === "2-10";
+  const userHomeroom = CURRENT_USER && CURRENT_USER.homeroom;
+  const isMyHomeroom = userHomeroom && cls === userHomeroom;
+  const has210Data = cls === "2-10"; // 학생 개인 데이터가 있는 유일한 반
   
   h+='<div class="class-badge" style="margin-bottom:10px"><h3>🎯 ';
-  h+=isMyHomeroom ? "2학년 10반 (우리반)" : `${cls.replace('-','학년 ')}반`;
+  h+=`${cls.replace('-','학년 ')}반`;
+  if(isMyHomeroom) h+=' <span style="background:#ffc107;color:#5d4037;font-size:11px;padding:2px 8px;border-radius:10px;margin-left:4px">🎯 우리반</span>';
   h+='</h3><div class="sub">';
-  if(isMyHomeroom){
-    const hr=T.find(t=>t.n==="박효덕");
-    h+=`담임 ${hr?hr.n:"박효덕"} · 210교실 · 학생 ${Object.keys(CLASS_DATA.students).length}명`;
+  if(has210Data){
+    h+=`담임 박효덕 · 210교실 · 학생 ${Object.keys(CLASS_DATA.students).length}명`;
   }else{
-    // Try to find homeroom teacher - most frequent teacher
-    const teacherCount={};
-    Object.values(ALL_CLASSES[cls]||{}).forEach(v=>{teacherCount[v.t]=(teacherCount[v.t]||0)+1});
-    const topTeacher=Object.entries(teacherCount).sort((a,b)=>b[1]-a[1])[0];
+    // Find who has this class as homeroom
+    const homeroomTeacher = Object.values(ALL_USERS).find(u => u && u.homeroom === cls);
     const room=Object.values(ALL_CLASSES[cls]||{}).find(v=>v.r)?.r || "-";
-    h+=`${room}호`;
+    if(homeroomTeacher){
+      h+=`담임 ${homeroomTeacher.teacherName||homeroomTeacher.email} · ${room}호`;
+    }else{
+      h+=`${room}호`;
+    }
   }
   h+='</div></div>';
   
@@ -1454,25 +1642,37 @@ function renderMyClassTab(){
   });
   h+='</div></div>';
   
-  if(isMyHomeroom){
+  if(has210Data){
     // Mode picker (only for 2-10 with student data)
     h+='<div class="segment" style="margin-top:10px">';
     [["class","📋 반 시간표"],["student","👤 학생별"],["group","👥 선택과목"]].forEach(([id,lbl])=>{h+=`<button class="${VIEW_MODE===id?'active':''}" onclick="setViewMode('${id}')">${lbl}</button>`});
     h+='</div>';
   }
   
-  if(isMyHomeroom && VIEW_MODE==="student"){
+  if(has210Data && VIEW_MODE==="student"){
     h+=renderStudentView();
-  }else if(isMyHomeroom && VIEW_MODE==="group"){
+  }else if(has210Data && VIEW_MODE==="group"){
     h+=renderGroupView();
   }else{
     // Render class schedule (for 2-10 or any other class)
     h+=renderClassScheduleWithOverrides(cls, weekStart);
   }
   
-  // Counsel time for homeroom teacher (2-10 only)
-  if(isMyHomeroom){
-    const hr=T.find(t=>t.n==="박효덕");
+  // Counsel time for homeroom teacher
+  // 1) If viewing 2-10 and 박효덕 → show 박효덕's free time
+  // 2) If viewing my own homeroom → show my (CURRENT_USER's) free time
+  // 3) If viewing other class and that class has a homeroom teacher assigned → show theirs
+  let counselTeacherName = null;
+  if(has210Data){
+    counselTeacherName = "박효덕";
+  }else if(isMyHomeroom && CURRENT_USER && CURRENT_USER.teacherName){
+    counselTeacherName = CURRENT_USER.teacherName;
+  }else{
+    const hrUser = Object.values(ALL_USERS).find(u => u && u.homeroom === cls && u.teacherName);
+    if(hrUser) counselTeacherName = hrUser.teacherName;
+  }
+  if(counselTeacherName){
+    const hr=T.find(t=>t.n===counselTeacherName);
     if(hr){
       const freeSlots=[];
       DAYS.forEach(d=>{PERIODS.forEach(p=>{if(gs(hr,d,p)==="free")freeSlots.push(d+p+"교시")})});
@@ -1902,6 +2102,168 @@ function confirmDeleteRecord(weekStart, id){
   }).catch(e=>alert("삭제 실패: "+e.message));
 }
 
+// ========== TAB: 관리자 ==========
+function setAdminEditUid(uid){ADMIN_EDIT_UID=uid;render()}
+
+async function adminUpdateUser(uid, field, value){
+  if(!isAdmin()){alert("관리자 권한 필요");return}
+  // Conflict check (exclude this uid)
+  if((field === "teacherName" || field === "homeroom") && value){
+    const conflict = checkProfileConflict(field, value, uid);
+    if(conflict){
+      if(!confirm(`⚠️ 충돌\n\n이 ${field==="teacherName"?"이름":"반"}(${value})은 이미 ${conflict.email}이(가) 사용 중입니다.\n\n그래도 저장하시겠습니까? (기존 사용자의 값은 자동 해제됩니다)`)){
+        return;
+      }
+      // Auto-clear from the conflicting user
+      try{
+        const oldEntry = ALL_USERS[conflict.uid] || {};
+        const cleared = {...oldEntry};
+        delete cleared[field];
+        await window.fb.set(`users/${conflict.uid}`, cleared);
+      }catch(e){alert("충돌 해제 실패: "+e.message);return}
+    }
+  }
+  try{
+    const existing = ALL_USERS[uid] || {};
+    const updated = {...existing, [field]: value || null, updatedAt: new Date().toISOString()};
+    if(!value) delete updated[field];
+    await window.fb.set(`users/${uid}`, updated);
+    // ALL_USERS will update via listener
+  }catch(e){
+    alert("저장 실패: "+e.message);
+  }
+}
+
+function renderAdminTab(){
+  let h='';
+  if(!isAdmin()){return `<div class="empty-state"><span class="emoji">🔒</span>관리자 권한이 필요합니다</div>`}
+  
+  const userList = Object.entries(ALL_USERS).sort((a,b)=>{
+    // Sort by: teacherName > email
+    const na = (a[1]&&a[1].teacherName) || (a[1]&&a[1].email) || "";
+    const nb = (b[1]&&b[1].teacherName) || (b[1]&&b[1].email) || "";
+    return na.localeCompare(nb);
+  });
+  
+  // 요약
+  let withName=0, withHomeroom=0;
+  userList.forEach(([uid,p])=>{
+    if(p&&p.teacherName)withName++;
+    if(p&&p.homeroom)withHomeroom++;
+  });
+  
+  h+='<div class="card">';
+  h+='<div class="help-text">👑 관리자 전용 · <b>이름/반 충돌</b>을 해결하거나 사용자 정보를 수정할 수 있습니다</div>';
+  h+='<div class="stat-grid">';
+  h+=`<div class="stat-card"><div class="stat-num">${userList.length}</div><div class="stat-lbl">가입 교사</div></div>`;
+  h+=`<div class="stat-card"><div class="stat-num">${withName}</div><div class="stat-lbl">이름 설정됨</div></div>`;
+  h+=`<div class="stat-card"><div class="stat-num">${withHomeroom}</div><div class="stat-lbl">담임 설정됨</div></div>`;
+  h+=`<div class="stat-card"><div class="stat-num">${userList.length-withName}</div><div class="stat-lbl">이름 미설정</div></div>`;
+  h+='</div></div>';
+  
+  // 중복/충돌 감지
+  const nameMap = {}, homeroomMap = {};
+  userList.forEach(([uid,p])=>{
+    if(!p)return;
+    if(p.teacherName){
+      if(!nameMap[p.teacherName])nameMap[p.teacherName]=[];
+      nameMap[p.teacherName].push({uid, email:p.email});
+    }
+    if(p.homeroom){
+      if(!homeroomMap[p.homeroom])homeroomMap[p.homeroom]=[];
+      homeroomMap[p.homeroom].push({uid, email:p.email, name:p.teacherName});
+    }
+  });
+  const conflicts = [];
+  Object.entries(nameMap).forEach(([name,users])=>{if(users.length>1)conflicts.push({type:"name",key:name,users})});
+  Object.entries(homeroomMap).forEach(([cls,users])=>{if(users.length>1)conflicts.push({type:"homeroom",key:cls,users})});
+  
+  if(conflicts.length > 0){
+    h+='<div class="card" style="border-left:4px solid #c62828">';
+    h+='<div class="card-title" style="color:#c62828">⚠️ 충돌 감지</div>';
+    conflicts.forEach(c=>{
+      h+=`<div style="background:#ffebee;border-radius:8px;padding:10px;margin-bottom:6px;font-size:12px">`;
+      h+=`<b>${c.type==="name"?"이름":"담임 반"}: ${c.key}</b> 가 ${c.users.length}명에게 할당됨<br>`;
+      c.users.forEach(u=>{h+=`<div style="margin-top:3px">• ${u.email}${u.name?" ("+u.name+")":""}</div>`});
+      h+=`</div>`;
+    });
+    h+='</div>';
+  }
+  
+  // 검색 & 사용자 목록
+  h+='<div class="card">';
+  h+='<div class="card-title">👥 사용자 목록</div>';
+  h+=`<input class="search-input" placeholder="🔍 이메일/이름 검색..." value="${SEARCH}" oninput="SEARCH=this.value;render()">`;
+  
+  const filtered = userList.filter(([uid,p])=>{
+    if(!SEARCH)return true;
+    const q = SEARCH.toLowerCase();
+    const e = (p&&p.email||"").toLowerCase();
+    const n = (p&&p.teacherName||"").toLowerCase();
+    const hr = (p&&p.homeroom||"").toLowerCase();
+    return e.includes(q)||n.includes(q)||hr.includes(q);
+  });
+  
+  h+=`<div style="font-size:11px;color:#86868b;margin-bottom:8px">${filtered.length}명 표시됨</div>`;
+  
+  h+='<div style="display:flex;flex-direction:column;gap:6px">';
+  filtered.forEach(([uid,p])=>{
+    const isSelf = uid === CURRENT_USER.uid;
+    const isEditing = ADMIN_EDIT_UID === uid;
+    const hasName = p && p.teacherName;
+    const hasHr = p && p.homeroom;
+    
+    // 이 사용자에게 충돌이 있는지
+    let hasConflict = false;
+    if(hasName && nameMap[p.teacherName] && nameMap[p.teacherName].length>1) hasConflict=true;
+    if(hasHr && homeroomMap[p.homeroom] && homeroomMap[p.homeroom].length>1) hasConflict=true;
+    
+    const borderColor = hasConflict ? "#c62828" : (isEditing ? "#1a237e" : "#e5e5ea");
+    h+=`<div style="background:#fff;border:2px solid ${borderColor};border-radius:10px;padding:10px 12px">`;
+    h+='<div style="display:flex;justify-content:space-between;align-items:start;gap:8px">';
+    h+='<div style="flex:1;min-width:0">';
+    h+=`<div style="font-size:13px;font-weight:700">${hasName?p.teacherName:'<span style="color:#c62828">이름 미설정</span>'}${hasHr?' · '+p.homeroom:''}${isSelf?' <span style="background:#ffc107;color:#5d4037;font-size:9px;padding:1px 5px;border-radius:4px">나</span>':''}${hasConflict?' <span style="background:#ffebee;color:#c62828;font-size:9px;padding:1px 5px;border-radius:4px">⚠️ 충돌</span>':''}</div>`;
+    h+=`<div style="font-size:11px;color:#86868b;overflow:hidden;text-overflow:ellipsis">${p&&p.email||uid}</div>`;
+    h+='</div>';
+    h+=`<button class="btn btn-sec btn-sm" onclick="setAdminEditUid('${isEditing?'':uid}')">${isEditing?'접기':'수정'}</button>`;
+    h+='</div>';
+    
+    if(isEditing){
+      h+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid #f0f0f0">';
+      // 이름 변경
+      h+='<div style="margin-bottom:10px">';
+      h+='<div style="font-size:11px;font-weight:700;color:#86868b;margin-bottom:4px">👤 이름</div>';
+      h+=`<input type="text" id="adminName_${uid}" value="${hasName?p.teacherName:''}" placeholder="이름 (빈칸=해제)" class="auth-input" style="margin-bottom:4px;padding:8px 12px;font-size:13px">`;
+      h+=`<div style="display:flex;flex-wrap:wrap;gap:3px;max-height:100px;overflow-y:auto;margin-bottom:6px">`;
+      T.forEach(t=>{
+        const active = p && p.teacherName === t.n;
+        h+=`<button class="teacher-select-pill${active?' active':''}" onclick="document.getElementById('adminName_${uid}').value='${t.n}'" style="font-size:10px;padding:4px 8px;min-height:24px">${t.n}</button>`;
+      });
+      h+='</div>';
+      h+=`<button class="btn btn-sm" style="width:100%" onclick="adminUpdateUser('${uid}','teacherName',document.getElementById('adminName_${uid}').value.trim())">이름 저장</button>`;
+      h+='</div>';
+      // 반 변경
+      h+='<div style="margin-bottom:10px">';
+      h+='<div style="font-size:11px;font-weight:700;color:#86868b;margin-bottom:4px">🎯 담임 반</div>';
+      h+=`<select id="adminHr_${uid}" class="auth-input" style="padding:8px 12px;font-size:13px">`;
+      h+='<option value="">(담임 아님)</option>';
+      Object.keys(ALL_CLASSES).sort((a,b)=>{const[ga,ca]=a.split('-').map(Number);const[gb,cb]=b.split('-').map(Number);return ga===gb?ca-cb:ga-gb}).forEach(c=>{
+        h+=`<option value="${c}"${p&&p.homeroom===c?' selected':''}>${c}</option>`;
+      });
+      h+='</select>';
+      h+=`<button class="btn btn-sm" style="width:100%;margin-top:6px" onclick="adminUpdateUser('${uid}','homeroom',document.getElementById('adminHr_${uid}').value)">반 저장</button>`;
+      h+='</div>';
+      // 전체 해제
+      h+=`<button class="btn btn-sm" style="width:100%;background:#f5f5f7;color:#c62828;border:1px solid #ffcdd2" onclick="if(confirm('이름과 반 정보를 모두 해제할까요?')){adminUpdateUser('${uid}','teacherName','');adminUpdateUser('${uid}','homeroom','')}">전체 해제</button>`;
+      h+='</div>';
+    }
+    h+='</div>';
+  });
+  h+='</div></div>';
+  
+  return h;
+}
+
 // ========== Main Render ==========
 function renderAuthScreen(){
   const app = document.getElementById('app');
@@ -1993,6 +2355,8 @@ function render(){
   else if(TAB==="event")h+=renderEventTab();
   else if(TAB==="view")h+=renderViewTab();
   else if(TAB==="records")h+=renderRecordsTab();
+  else if(TAB==="admin" && isAdmin())h+=renderAdminTab();
+  else if(TAB==="admin" && !isAdmin())h+=`<div class="empty-state"><span class="emoji">🔒</span>관리자 권한이 필요합니다</div>`;
   h+='</div>';
   h+=renderBottomNav();
   app.innerHTML=h;
