@@ -229,6 +229,37 @@ table.tt{border-collapse:separate;border-spacing:2px;width:100%;table-layout:fix
 .install-prompt .primary{background:#fff;color:#1a237e}
 .install-prompt .close{background:transparent;color:#fff;opacity:.7;padding:4px 8px}
 </style>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, push, onValue, set, remove, get, child } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDzBnbUtsGSdKqFsML9BbEA8iI3syY1MFg",
+  authDomain: "tongyeonggo-helper.firebaseapp.com",
+  databaseURL: "https://tongyeonggo-helper-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "tongyeonggo-helper",
+  storageBucket: "tongyeonggo-helper.firebasestorage.app",
+  messagingSenderId: "689696417332",
+  appId: "1:689696417332:web:952112fc9f53e514374c61"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+// Expose to window for non-module scripts
+window.fb = {
+  db,
+  ref: (path) => ref(db, path),
+  push: (path, data) => push(ref(db, path), data),
+  set: (path, data) => set(ref(db, path), data),
+  remove: (path) => remove(ref(db, path)),
+  get: (path) => get(ref(db, path)),
+  onValue: (path, callback) => onValue(ref(db, path), callback)
+};
+
+// Dispatch ready event
+window.dispatchEvent(new Event('fb-ready'));
+</script>
 </head>
 <body>
 <div class="app" id="app"></div>
@@ -260,6 +291,95 @@ let VIEW_MODE="class",SELECTED_STUDENT=null,SELECTED_GROUP=null;
 let SHEET_OPEN=false,SHEET_CONTENT="";
 let MORE_OPEN=false;
 
+// Records state
+let RECORDS = {};  // {date: {id: record}}
+let VIEW_DATE = new Date().toISOString().slice(0,10); // YYYY-MM-DD
+let FB_READY = false;
+
+// Helpers for date
+function todayStr(){return new Date().toISOString().slice(0,10)}
+function formatDate(s){const d=new Date(s);const days=["일","월","화","수","목","금","토"];return `${s} (${days[d.getDay()]})`}
+
+// Get effective schedule for a teacher on a specific date (applies overrides)
+function getEffectiveSlot(teacher, day, period, date){
+  const k = day + period;
+  const orig = teacher.s[k];
+  if(!date || !RECORDS[date]) return orig;
+  // Check if any record affects this slot
+  const records = Object.values(RECORDS[date]);
+  for(const rec of records){
+    if(rec.type === "sub"){
+      // Substitute: if this teacher is the substitute, they get the class
+      if(rec.substitute === teacher.n && rec.day === day && rec.period === period){
+        return `대강:${rec.subj}|${rec.room}`;
+      }
+      // If this is the original teacher's slot, it's covered but not changed
+      // (the substitute takes the class, original teacher's slot remains marked)
+    }
+    if(rec.type === "swap"){
+      // Swap: move classes between two teachers
+      if(rec.teacher1 === teacher.n){
+        // My original slot (day1/period1) → now teacher2's class
+        if(rec.day1 === day && rec.period1 === period){
+          return `교체:${rec.subj2}|${rec.room2}`;
+        }
+        // My new slot (day2/period2) → my original class
+        if(rec.day2 === day && rec.period2 === period){
+          return orig ? orig : `교체:${rec.subj1}|${rec.room1}`;
+        }
+      }
+      if(rec.teacher2 === teacher.n){
+        // Teacher2's original slot (day2/period2) → now my class
+        if(rec.day2 === day && rec.period2 === period){
+          return `교체:${rec.subj1}|${rec.room1}`;
+        }
+        // Teacher2's new slot (day1/period1) → their original class
+        if(rec.day1 === day && rec.period1 === period){
+          return orig ? orig : `교체:${rec.subj2}|${rec.room2}`;
+        }
+      }
+    }
+  }
+  return orig;
+}
+
+// Firebase integration
+function setupFirebase(){
+  if(!window.fb){
+    setTimeout(setupFirebase, 200);
+    return;
+  }
+  FB_READY = true;
+  // Listen for record changes
+  window.fb.onValue("overrides", (snapshot) => {
+    const data = snapshot.val() || {};
+    RECORDS = data;
+    render();
+  });
+}
+
+function saveRecord(record){
+  if(!FB_READY || !window.fb){
+    alert("Firebase 연결 대기중입니다. 잠시 후 다시 시도해주세요.");
+    return Promise.reject();
+  }
+  const date = record.date || todayStr();
+  return window.fb.push(`overrides/${date}`, {
+    ...record,
+    date,
+    createdAt: new Date().toISOString()
+  });
+}
+
+function deleteRecord(date, id){
+  if(!FB_READY || !window.fb) return Promise.reject();
+  return window.fb.remove(`overrides/${date}/${id}`);
+}
+
+window.addEventListener('fb-ready', setupFirebase);
+if(window.fb) setupFirebase();
+else setTimeout(setupFirebase, 300);
+
 // Navigation (primary tabs in bottom bar, secondary in "more")
 const NAV_PRIMARY=[
   {id:"swap",icon:"🔄",label:"교체"},
@@ -268,6 +388,7 @@ const NAV_PRIMARY=[
   {id:"analysis",icon:"📊",label:"분석"}
 ];
 const NAV_MORE=[
+  {id:"records",icon:"📝",label:"교체/대강 기록"},
   {id:"common",icon:"👥",label:"공통 공강"},
   {id:"room",icon:"🏫",label:"교실 현황"},
   {id:"heatmap",icon:"🔥",label:"수업 밀도 히트맵"},
@@ -333,7 +454,7 @@ function deptCounts(){const c={"전체":T.length};T.forEach(t=>{c[t.d]=(c[t.d]||
 
 // ========== Renderers ==========
 function renderTopbar(){
-  let tabInfo={swap:{t:"수업 교체",s:"내 수업을 다른 교사와 바꾸거나 대강 찾기"},find:{t:"시간별 공강",s:"특정 시간 공강 교사 찾기"},common:{t:"공통 공강",s:"여러 교사 동시 공강 시간"},myclass:{t:"우리반",s:"2학년 10반 관리"},room:{t:"교실 현황",s:"교실별 사용 현황"},analysis:{t:"근무 분석",s:"교사별 시수·연강 통계"},heatmap:{t:"수업 밀도",s:"시간대별 수업량 분포"},event:{t:"행사 계산",s:"시험/행사 시수 변동 계산"},view:{t:"시간표 조회",s:"개별 교사 시간표"}};
+  let tabInfo={swap:{t:"수업 교체",s:"내 수업을 다른 교사와 바꾸거나 대강 찾기"},find:{t:"시간별 공강",s:"특정 시간 공강 교사 찾기"},common:{t:"공통 공강",s:"여러 교사 동시 공강 시간"},myclass:{t:"우리반",s:"2학년 10반 관리"},room:{t:"교실 현황",s:"교실별 사용 현황"},analysis:{t:"근무 분석",s:"교사별 시수·연강 통계"},heatmap:{t:"수업 밀도",s:"시간대별 수업량 분포"},event:{t:"행사 계산",s:"시험/행사 시수 변동 계산"},view:{t:"시간표 조회",s:"개별 교사 시간표"},records:{t:"교체/대강 기록",s:"날짜별 변경사항 관리"}};
   const info=tabInfo[TAB]||{t:"교무도우미",s:""};
   return `<div class="topbar"><div class="topbar-content"><div><div class="topbar-title">${info.t}</div><div class="topbar-sub">${info.s}</div></div><button class="topbar-btn" onclick="toggleMore()">⋯</button></div></div>`;
 }
@@ -412,13 +533,24 @@ function renderTimetable(teacher,onCellClick,selectedKey,hlKeys){
 // ========== TAB: 수업 교체 ==========
 function renderSwapTab(){
   let h='';
+  // Date selector at top
+  const todayCount = (RECORDS[VIEW_DATE] && Object.keys(RECORDS[VIEW_DATE]).length) || 0;
+  h+='<div class="card" style="padding:10px 12px;margin-bottom:8px">';
+  h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
+  h+='<div style="font-size:11px;font-weight:700;color:#86868b">📅 기준 날짜</div>';
+  h+=`<input type="date" value="${VIEW_DATE}" onchange="VIEW_DATE=this.value;SEL=null;render()" style="flex:1;min-width:140px;padding:6px 8px;border-radius:6px;border:1px solid #e5e5ea;font-size:12px;font-family:inherit">`;
+  h+=`<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="VIEW_DATE=todayStr();SEL=null;render()">오늘</button>`;
+  if(todayCount>0)h+=`<span style="background:#e65100;color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700">기록 ${todayCount}건 반영됨</span>`;
+  h+='</div></div>';
+  
   if(ME===null){
     h+='<div class="card"><div class="help-text">💡 <b>본인 선생님 선택 → 교체할 수업 칸 클릭</b></div>';
     h+=renderSearchAndTeachers('setMe',null);
     h+='</div>';
     return h;
   }
-  const myT=T[ME];
+  const myT_orig=T[ME];
+  const myT=getTeacherWithOverrides(myT_orig, VIEW_DATE);
   h+=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div><div style="font-size:15px;font-weight:700">${myT.n}${deptTag(myT)}</div><div style="font-size:11px;color:#86868b;margin-top:2px">${myT.h}시수</div></div>`;
   h+=`<button class="btn btn-sec btn-sm" onclick="ME=null;SEL=null;render()">변경</button></div>`;
   h+=renderTimetable(myT,'setSel',SEL,null);
@@ -429,25 +561,52 @@ function renderSwapTab(){
     if(selCell){
       const day=SEL[0],per=SEL.slice(1);
       const subs=[],swaps=[];
-      T.forEach((t,i)=>{if(i===ME)return;if(gs(t,day,parseInt(per))==="free")subs.push({idx:i,name:t.n,dept:t.d})});
+      // Use effective (overridden) schedules for accurate sub/swap matching
+      T.forEach((t,i)=>{
+        if(i===ME)return;
+        const tEff=getTeacherWithOverrides(t, VIEW_DATE);
+        if(gs(tEff,day,parseInt(per))==="free")subs.push({idx:i,name:t.n,dept:t.d})
+      });
       const myRoom=selCell.room;
       T.forEach((t,i)=>{
         if(i===ME)return;
-        if(gs(t,day,parseInt(per))!=="free")return;
+        const tEff=getTeacherWithOverrides(t, VIEW_DATE);
+        if(gs(tEff,day,parseInt(per))!=="free")return;
         DAYS.forEach(d2=>{PERIODS.forEach(p2=>{
-          const k2=d2+p2;const c2=pc(t.s[k2]);
+          const k2=d2+p2;const c2=pc(tEff.s[k2]);
           if(!c2||c2.room!==myRoom)return;
           if(gs(myT,d2,p2)!=="free")return;
-          if(gs(t,d2,p2)!=="busy")return;
+          if(gs(tEff,d2,p2)!=="busy")return;
           swaps.push({idx:i,name:t.n,theirDay:d2,theirPer:p2,subj:c2.full,room:c2.room});
         })});
       });
       h+=`<div class="selected-banner"><div class="subj">${selCell.full}</div><div class="meta">${day}요일 ${per}교시 · ${selCell.room}교실</div></div>`;
       h+='<div class="card">';
       h+=`<div class="result-head"><div class="card-title" style="margin:0;color:#2e7d32">✅ 대강 가능</div><span class="badge green">${subs.length}</span></div>`;
-      h+='<div class="card-sub">이 시간에 공강인 교사</div>';
+      h+='<div class="card-sub">이 시간에 공강인 교사 · 🎯 동교과 우선</div>';
       if(subs.length===0)h+='<div class="empty-state"><span class="emoji">😔</span>공강인 교사가 없습니다</div>';
-      else{h+='<div class="chip-list">';subs.forEach(s=>{h+=`<button class="chip green-chip" onclick='showSubAnnouncement(${JSON.stringify({myName:myT.n,subName:s.name,day,per,subj:selCell.full,room:selCell.room}).replace(/'/g,"&#39;")})'>${s.name}<span class="dept-tag">${s.dept}</span></button>`});h+='</div>'}
+      else{
+        // Group subs by department: same dept first, then others by dept name
+        const myDept=myT.d;
+        const grouped={};
+        subs.forEach(s=>{if(!grouped[s.dept])grouped[s.dept]=[];grouped[s.dept].push(s)});
+        // Sort dept names: my dept first, then others alphabetically
+        const deptOrder=Object.keys(grouped).sort((a,b)=>{
+          if(a===myDept)return -1;
+          if(b===myDept)return 1;
+          return a.localeCompare(b);
+        });
+        deptOrder.forEach(dept=>{
+          const isSame=dept===myDept;
+          h+=`<div style="margin-bottom:8px"><div style="font-size:11px;font-weight:700;color:${isSame?"#c62828":"#86868b"};margin-bottom:4px;display:flex;align-items:center;gap:4px">${isSame?"🎯 ":""}${dept} <span style="font-weight:400;opacity:.7">(${grouped[dept].length}명)</span>${isSame?' <span style="background:#ffebee;color:#c62828;font-size:9px;padding:1px 5px;border-radius:3px;margin-left:4px">동교과</span>':""}</div>`;
+          h+='<div class="chip-list">';
+          grouped[dept].sort((a,b)=>a.name.localeCompare(b.name)).forEach(s=>{
+            const chipStyle=isSame?'style="background:#ffebee;border-color:#ffcdd2;color:#c62828;font-weight:700"':'';
+            h+=`<button class="chip green-chip" ${chipStyle} onclick='showSubAnnouncement(${JSON.stringify({myName:myT.n,subName:s.name,day,per,subj:selCell.full,room:selCell.room}).replace(/'/g,"&#39;")})'>${s.name}</button>`;
+          });
+          h+='</div></div>';
+        });
+      }
       h+='</div>';
       h+='<div class="card">';
       h+=`<div class="result-head"><div class="card-title" style="margin:0;color:#1a237e">🔄 수업 교체</div><span class="badge">${swaps.length}</span></div>`;
@@ -461,15 +620,293 @@ function renderSwapTab(){
 }
 
 function showSubAnnouncement(d){
+  const myT=T.find(t=>t.n===d.myName);
+  const subT=T.find(t=>t.n===d.subName);
   const msg=`[대강 요청]\n\n${d.day}요일 ${d.per}교시\n${d.myName} 선생님의 수업을 ${d.subName} 선생님이 대강해주시기 바랍니다.\n\n• 과목: ${d.subj}\n• 교실: ${d.room}교실\n\n감사합니다.`;
-  const body=`<div class="announce-box" id="annText">${msg.replace(/\n/g,"\n")}</div><button class="btn btn-full" id="copyBtn" onclick="copyText('annText','copyBtn')" style="margin-top:10px">📋 안내문 복사하기</button>`;
-  openSheet('📢 대강 안내문',body);
+  
+  if(!subT){
+    openSheet('📢 대강 안내문',`<div class="announce-box" id="annText">${msg}</div><button class="btn btn-full" id="copyBtn" onclick="copyText('annText','copyBtn')" style="margin-top:10px">📋 안내문 복사하기</button>`);
+    return;
+  }
+  
+  // Build simulated schedule: sub teacher gets my class added to their timetable
+  const subAfter=JSON.parse(JSON.stringify(subT));
+  const targetKey=d.day+d.per;
+  subAfter.s[targetKey]=`대강:${d.subj}|${d.room}`;
+  
+  // Analyze consecutive classes on that day
+  function analyzeDayRun(teacher,day){
+    let curRun=0,maxRun=0;
+    PERIODS.forEach(p=>{
+      const v=teacher.s[day+p];
+      if(v&&v!=="X"){curRun++;if(curRun>maxRun)maxRun=curRun}
+      else{curRun=0}
+    });
+    return maxRun;
+  }
+  
+  const subBefore=analyzeDayRun(subT,d.day);
+  const subAfterRun=analyzeDayRun(subAfter,d.day);
+  
+  // Count total classes on that day
+  let subDayBefore=0,subDayAfter=0;
+  PERIODS.forEach(p=>{
+    if(subT.s[d.day+p]&&subT.s[d.day+p]!=="X")subDayBefore++;
+    if(subAfter.s[d.day+p]&&subAfter.s[d.day+p]!=="X")subDayAfter++;
+  });
+  
+  const warnings=[];
+  if(subAfterRun>=3&&subAfterRun>subBefore){
+    warnings.push(`${d.subName} 선생님: ${d.day}요일 <b>${subAfterRun}연강</b> 발생 (기존 ${subBefore||0}연강)`);
+  }
+  
+  // Render preview table (highlight the substitute slot)
+  function renderSubPreview(before,after){
+    let h='<table class="tt" style="width:100%"><thead><tr><th>⏰</th>';
+    DAYS.forEach(dd=>{h+=`<th>${dd}</th>`});
+    h+='</tr></thead><tbody>';
+    PERIODS.forEach(pr=>{
+      h+=`<tr><td style="background:#f5f5f7;color:#86868b;font-weight:700;font-size:10px">${pr}</td>`;
+      DAYS.forEach(dd=>{
+        const k=dd+pr;
+        const beforeV=before.s[k]||'';
+        const afterV=after.s[k]||'';
+        const changed=beforeV!==afterV;
+        const s=gs(after,dd,pr);
+        const c=pc(afterV);
+        let cls='',style='';
+        if(s==='mark')cls='mark';
+        else if(s==='busy'){cls='busy';if(c)style=`background:${gc(c.subj)}`}
+        else cls='empty';
+        if(changed){
+          style+=';box-shadow:inset 0 0 0 2.5px #e65100';
+          if(s==='busy')style=`background:#fff3e0;${style}`;
+        }
+        h+=`<td class="${cls}" style="${style}">`;
+        if(s==='mark')h+='<span style="color:#c7c7cc;font-size:9px">×</span>';
+        else if(s==='busy'&&c){
+          const icon=changed?'<span style="position:absolute;top:0px;right:2px;font-size:9px">🆘</span>':'';
+          const label=changed?`<div class="sn" style="color:#e65100;font-weight:700">대강</div><div class="rm" style="color:#bf360c">${d.subj} · ${d.room}</div>`:`<div class="sn">${c.full.length>8?c.subj:c.full}</div><div class="rm">${c.room}</div>`;
+          h+=`<div style="position:relative">${icon}${label}</div>`;
+        }
+        else h+='<span style="color:#d1d1d6;font-size:9px">·</span>';
+        h+='</td>';
+      });
+      h+='</tr>';
+    });
+    h+='</tbody></table>';
+    return h;
+  }
+  
+  let body='';
+  
+  // Warning / OK
+  if(warnings.length>0){
+    body+='<div style="background:#fff3e0;border:1.5px solid #ff9800;border-radius:10px;padding:10px 12px;margin-bottom:12px">';
+    body+='<div style="font-weight:700;color:#e65100;font-size:13px;margin-bottom:6px">⚠️ 연강 주의</div>';
+    warnings.forEach(w=>{body+=`<div style="font-size:12px;color:#bf360c;line-height:1.6">${w}</div>`});
+    body+='</div>';
+  }else{
+    body+='<div style="background:#e8f5e9;border:1.5px solid #66bb6a;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#1b5e20"><b>✅ 연강 걱정 없음</b> · 대강해도 3연강 이상 발생하지 않아요</div>';
+  }
+  
+  // Info summary
+  body+=`<div style="background:#f0f4ff;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#1a237e;line-height:1.6">`;
+  body+=`📊 ${d.subName} 선생님 ${d.day}요일 근무: <b>${subDayBefore}시간 → ${subDayAfter}시간</b> (+1)<br>`;
+  body+=`연강: ${subBefore||0}연강 → ${subAfterRun}연강`;
+  body+=`</div>`;
+  
+  body+='<div style="font-size:10px;color:#86868b;margin-bottom:8px;line-height:1.5">🆘 주황 칸 = 대강 배정됨</div>';
+  
+  // Preview table
+  body+=`<div style="margin-bottom:14px">`;
+  body+=`<div style="font-size:13px;font-weight:700;color:#1a237e;margin-bottom:6px">👤 ${d.subName} 선생님 시간표 (대강 반영)</div>`;
+  body+=`<div class="tt-wrap">${renderSubPreview(subT,subAfter)}</div>`;
+  body+=`</div>`;
+  
+  // Announcement
+  body+=`<div style="margin-top:14px;padding-top:14px;border-top:1px solid #e5e5ea">`;
+  body+=`<div style="font-size:13px;font-weight:700;color:#1a237e;margin-bottom:6px">📢 안내문</div>`;
+  body+=`<div class="announce-box" id="annText">${msg}</div>`;
+  body+=`<div style="display:flex;gap:6px;margin-top:10px">`;
+  body+=`<button class="btn btn-sec" id="copyBtn" onclick="copyText('annText','copyBtn')" style="flex:1">📋 복사</button>`;
+  body+=`<button class="btn" id="confirmSubBtn" onclick='confirmSub(${JSON.stringify(d).replace(/'/g,"&#39;")})' style="flex:1.5">✅ 기록 확정</button>`;
+  body+=`</div>`;
+  body+=`<div style="font-size:10px;color:#86868b;margin-top:6px;text-align:center">확정 시 오늘(${todayStr()}) 기록으로 저장됩니다</div>`;
+  body+=`</div>`;
+  
+  openSheet('🆘 대강 미리보기',body);
+}
+
+function confirmSub(d){
+  if(!FB_READY){alert("Firebase 연결 중입니다. 잠시 후 다시 시도해주세요.");return}
+  const record = {
+    type: "sub",
+    teacher: d.myName,
+    substitute: d.subName,
+    day: d.day,
+    period: parseInt(d.per),
+    subj: d.subj,
+    room: d.room,
+    createdBy: d.myName
+  };
+  const btn=document.getElementById('confirmSubBtn');
+  if(btn){btn.textContent="저장 중...";btn.disabled=true}
+  saveRecord(record).then(()=>{
+    if(btn){btn.textContent="✅ 확정됨";btn.style.background="#2e7d32"}
+    setTimeout(()=>{closeSheet();setTab('records')},800);
+  }).catch(e=>{
+    if(btn){btn.textContent="✅ 기록 확정";btn.disabled=false}
+    alert("저장 실패: "+e.message);
+  });
 }
 
 function showSwapAnnouncement(d){
+  const myT=T.find(t=>t.n===d.myName);
+  const otherT=T.find(t=>t.n===d.otherName);
   const msg=`[수업 교체 안내]\n\n${d.myName} 선생님과 ${d.otherName} 선생님 간 수업 교체\n\n▶ ${d.myDay}요일 ${d.myPer}교시 (${d.myRoom}교실)\n  기존: ${d.myName} - ${d.mySubj}\n  변경: ${d.otherName} - ${d.theirSubj}\n\n▶ ${d.theirDay}요일 ${d.theirPer}교시 (${d.theirRoom}교실)\n  기존: ${d.otherName} - ${d.theirSubj}\n  변경: ${d.myName} - ${d.mySubj}\n\n각 반 학생들은 수업 결손 없이 정상 수업받습니다.`;
-  const body=`<div class="announce-box" id="annText">${msg.replace(/\n/g,"\n")}</div><button class="btn btn-full" id="copyBtn" onclick="copyText('annText','copyBtn')" style="margin-top:10px">📋 안내문 복사하기</button>`;
-  openSheet('📢 교체 안내문',body);
+  
+  if(!myT||!otherT){
+    openSheet('📢 교체 안내문',`<div class="announce-box" id="annText">${msg}</div><button class="btn btn-full" id="copyBtn" onclick="copyText('annText','copyBtn')" style="margin-top:10px">📋 안내문 복사하기</button>`);
+    return;
+  }
+  
+  // Build simulated schedules after swap
+  const myAfter=JSON.parse(JSON.stringify(myT));
+  const otherAfter=JSON.parse(JSON.stringify(otherT));
+  const myKey=d.myDay+d.myPer;
+  const theirKey=d.theirDay+d.theirPer;
+  myAfter.s[theirKey]=myT.s[myKey];
+  delete myAfter.s[myKey];
+  otherAfter.s[myKey]=otherT.s[theirKey];
+  delete otherAfter.s[theirKey];
+  
+  // Analyze consecutive classes for a specific day
+  function analyzeDayRun(teacher,day){
+    let curRun=0,maxRun=0;
+    PERIODS.forEach(p=>{
+      const v=teacher.s[day+p];
+      if(v&&v!=="X"){curRun++;if(curRun>maxRun)maxRun=curRun}
+      else{curRun=0}
+    });
+    return maxRun;
+  }
+  
+  // Check warnings: 3+ consecutive after swap
+  const warnings=[];
+  // My new workload on theirDay
+  const myBefore=analyzeDayRun(myT,d.theirDay);
+  const myAfterRun=analyzeDayRun(myAfter,d.theirDay);
+  if(myAfterRun>=3&&myAfterRun>myBefore){
+    warnings.push(`${d.myName} 선생님: ${d.theirDay}요일 <b>${myAfterRun}연강</b> 발생 (기존 ${myBefore||0}연강)`);
+  }
+  // Other teacher's new workload on myDay
+  const otherBefore=analyzeDayRun(otherT,d.myDay);
+  const otherAfterRun=analyzeDayRun(otherAfter,d.myDay);
+  if(otherAfterRun>=3&&otherAfterRun>otherBefore){
+    warnings.push(`${d.otherName} 선생님: ${d.myDay}요일 <b>${otherAfterRun}연강</b> 발생 (기존 ${otherBefore||0}연강)`);
+  }
+  
+  // Render preview table showing changed cells
+  function renderPreviewTable(before,after){
+    let h='<table class="tt" style="width:100%"><thead><tr><th>⏰</th>';
+    DAYS.forEach(dd=>{h+=`<th>${dd}</th>`});
+    h+='</tr></thead><tbody>';
+    PERIODS.forEach(pr=>{
+      h+=`<tr><td style="background:#f5f5f7;color:#86868b;font-weight:700;font-size:10px">${pr}</td>`;
+      DAYS.forEach(dd=>{
+        const k=dd+pr;
+        const beforeV=before.s[k]||'';
+        const afterV=after.s[k]||'';
+        const changed=beforeV!==afterV;
+        const s=gs(after,dd,pr);
+        const c=pc(afterV);
+        let cls='',style='';
+        if(s==='mark')cls='mark';
+        else if(s==='busy'){cls='busy';if(c)style=`background:${gc(c.subj)}`}
+        else cls='empty';
+        if(changed){
+          if(s==='busy')style+=';box-shadow:inset 0 0 0 2.5px #e65100';
+          else style='background:#fff3e0;box-shadow:inset 0 0 0 2.5px #e65100';
+        }
+        h+=`<td class="${cls}" style="${style}">`;
+        if(s==='mark')h+='<span style="color:#c7c7cc;font-size:9px">×</span>';
+        else if(s==='busy'&&c){
+          const icon=changed?'<span style="position:absolute;top:0px;right:2px;font-size:9px;color:#e65100;font-weight:700">➕</span>':'';
+          h+=`<div style="position:relative">${icon}<div class="sn">${c.full.length>8?c.subj:c.full}</div><div class="rm">${c.room}</div></div>`;
+        }
+        else{
+          if(changed)h+='<span style="color:#e65100;font-size:9px;font-weight:700">➖</span>';
+          else h+='<span style="color:#d1d1d6;font-size:9px">·</span>';
+        }
+        h+='</td>';
+      });
+      h+='</tr>';
+    });
+    h+='</tbody></table>';
+    return h;
+  }
+  
+  let body='';
+  
+  // Warning / OK banner
+  if(warnings.length>0){
+    body+='<div style="background:#fff3e0;border:1.5px solid #ff9800;border-radius:10px;padding:10px 12px;margin-bottom:12px">';
+    body+='<div style="font-weight:700;color:#e65100;font-size:13px;margin-bottom:6px">⚠️ 연강 주의</div>';
+    warnings.forEach(w=>{body+=`<div style="font-size:12px;color:#bf360c;line-height:1.6;margin-bottom:2px">${w}</div>`});
+    body+='</div>';
+  }else{
+    body+='<div style="background:#e8f5e9;border:1.5px solid #66bb6a;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#1b5e20"><b>✅ 연강 걱정 없음</b> · 교체 후에도 3연강 이상 발생하지 않아요</div>';
+  }
+  
+  // Legend
+  body+='<div style="font-size:10px;color:#86868b;margin-bottom:8px;line-height:1.5">🟠 주황 테두리 = 변경된 칸 · ➕ 추가된 수업 · ➖ 비워진 칸</div>';
+  
+  // My schedule preview
+  body+=`<div style="margin-bottom:12px">`;
+  body+=`<div style="font-size:13px;font-weight:700;color:#1a237e;margin-bottom:6px">👤 ${d.myName} 선생님 (교체 후)</div>`;
+  body+=`<div class="tt-wrap">${renderPreviewTable(myT,myAfter)}</div>`;
+  body+=`</div>`;
+  
+  // Other teacher schedule preview
+  body+=`<div style="margin-bottom:14px">`;
+  body+=`<div style="font-size:13px;font-weight:700;color:#1a237e;margin-bottom:6px">👤 ${d.otherName} 선생님 (교체 후)</div>`;
+  body+=`<div class="tt-wrap">${renderPreviewTable(otherT,otherAfter)}</div>`;
+  body+=`</div>`;
+  
+  // Announcement
+  body+=`<div style="margin-top:14px;padding-top:14px;border-top:1px solid #e5e5ea">`;
+  body+=`<div style="font-size:13px;font-weight:700;color:#1a237e;margin-bottom:6px">📢 안내문</div>`;
+  body+=`<div class="announce-box" id="annText">${msg}</div>`;
+  body+=`<div style="display:flex;gap:6px;margin-top:10px">`;
+  body+=`<button class="btn btn-sec" id="copyBtn" onclick="copyText('annText','copyBtn')" style="flex:1">📋 복사</button>`;
+  body+=`<button class="btn" id="confirmSwapBtn" onclick='confirmSwap(${JSON.stringify(d).replace(/'/g,"&#39;")})' style="flex:1.5">✅ 기록 확정</button>`;
+  body+=`</div>`;
+  body+=`<div style="font-size:10px;color:#86868b;margin-top:6px;text-align:center">확정 시 오늘(${todayStr()}) 기록으로 저장됩니다</div>`;
+  body+=`</div>`;
+  
+  openSheet('🔄 교체 미리보기',body);
+}
+
+function confirmSwap(d){
+  if(!FB_READY){alert("Firebase 연결 중입니다. 잠시 후 다시 시도해주세요.");return}
+  const record = {
+    type: "swap",
+    teacher1: d.myName,
+    teacher2: d.otherName,
+    day1: d.myDay, period1: parseInt(d.myPer), subj1: d.mySubj, room1: d.myRoom,
+    day2: d.theirDay, period2: parseInt(d.theirPer), subj2: d.theirSubj, room2: d.theirRoom,
+    createdBy: d.myName
+  };
+  const btn=document.getElementById('confirmSwapBtn');
+  if(btn){btn.textContent="저장 중...";btn.disabled=true}
+  saveRecord(record).then(()=>{
+    if(btn){btn.textContent="✅ 확정됨";btn.style.background="#2e7d32"}
+    setTimeout(()=>{closeSheet();setTab('records')},800);
+  }).catch(e=>{
+    if(btn){btn.textContent="✅ 기록 확정";btn.disabled=false}
+    alert("저장 실패: "+e.message);
+  });
 }
 
 // ========== TAB: 시간별 공강 ==========
@@ -830,6 +1267,105 @@ function renderViewTab(){
   return h;
 }
 
+
+// Get a teacher with effective (overridden) schedule applied
+function getTeacherWithOverrides(teacher, date){
+  if(!date || !RECORDS[date] || Object.keys(RECORDS[date]).length===0) return teacher;
+  const copy = {...teacher, s:{...teacher.s}};
+  DAYS.forEach(d=>{PERIODS.forEach(p=>{
+    const eff = getEffectiveSlot(teacher, d, p, date);
+    if(eff !== teacher.s[d+p]){
+      copy.s[d+p] = eff || undefined;
+      if(!eff) delete copy.s[d+p];
+    }
+  })});
+  return copy;
+}
+
+// ========== TAB: 기록 (Records) ==========
+function renderRecordsTab(){
+  let h='';
+  h+='<div class="card">';
+  h+='<div class="help-text">💡 <b>확정된 교체/대강 기록</b>을 날짜별로 관리합니다. 기록된 내용은 시간표에 자동 반영돼요.</div>';
+  
+  // Date selector
+  h+='<div style="margin-bottom:10px">';
+  h+='<div style="font-size:12px;font-weight:700;margin-bottom:6px">📅 조회 날짜</div>';
+  h+=`<input type="date" value="${VIEW_DATE}" onchange="VIEW_DATE=this.value;render()" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid #e5e5ea;font-size:15px;font-family:inherit;background:#fff">`;
+  h+='<div style="display:flex;gap:4px;margin-top:6px">';
+  h+=`<button class="qa-btn" onclick="VIEW_DATE=todayStr();render()">오늘</button>`;
+  h+=`<button class="qa-btn" onclick="VIEW_DATE=new Date(Date.now()+86400000).toISOString().slice(0,10);render()">내일</button>`;
+  const yesterday = new Date(Date.now()-86400000).toISOString().slice(0,10);
+  h+=`<button class="qa-btn" onclick="VIEW_DATE='${yesterday}';render()">어제</button>`;
+  h+='</div>';
+  h+='</div>';
+  
+  // Show records for VIEW_DATE
+  const dateRecords = RECORDS[VIEW_DATE] || {};
+  const recordList = Object.entries(dateRecords).sort((a,b)=>(a[1].createdAt||"").localeCompare(b[1].createdAt||""));
+  
+  h+=`<div style="background:#f0f4ff;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#1a237e"><b>${formatDate(VIEW_DATE)}</b> · 기록 ${recordList.length}건</div>`;
+  
+  if(!FB_READY){
+    h+='<div class="empty-state"><span class="emoji">🔄</span>Firebase 연결 중...</div>';
+    h+='</div>';
+    return h;
+  }
+  
+  if(recordList.length === 0){
+    h+='<div class="empty-state"><span class="emoji">📭</span>이 날짜에 기록된 교체/대강이 없습니다</div>';
+    h+='<div style="text-align:center;font-size:11px;color:#86868b;margin-top:4px">수업 교체 탭에서 교체/대강을 확정하면 여기에 기록됩니다</div>';
+    h+='</div>';
+    return h;
+  }
+  
+  h+='</div>';
+  
+  // Render each record
+  recordList.forEach(([id, rec])=>{
+    const isSwap = rec.type === "swap";
+    const bgColor = isSwap ? "#e3f2fd" : "#fff3e0";
+    const borderColor = isSwap ? "#1565c0" : "#e65100";
+    const icon = isSwap ? "🔄" : "🆘";
+    const label = isSwap ? "수업 교체" : "대강";
+    
+    h+='<div class="card" style="border-left:4px solid '+borderColor+'">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">';
+    h+=`<div><div style="font-size:14px;font-weight:700;color:${borderColor}">${icon} ${label}</div>`;
+    if(rec.createdAt){
+      const t = new Date(rec.createdAt);
+      h+=`<div style="font-size:10px;color:#86868b;margin-top:2px">${t.toLocaleString('ko-KR',{hour12:false})}${rec.createdBy?" · "+rec.createdBy:""}</div>`;
+    }
+    h+='</div>';
+    h+=`<button onclick="confirmDeleteRecord('${VIEW_DATE}','${id}')" style="background:#fff;border:1px solid #e5e5ea;color:#c62828;padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit">삭제</button>`;
+    h+='</div>';
+    
+    if(isSwap){
+      h+='<div style="background:'+bgColor+';border-radius:8px;padding:10px;font-size:12px;line-height:1.6">';
+      h+=`<div><b>${rec.teacher1}</b> ↔ <b>${rec.teacher2}</b></div>`;
+      h+=`<div style="margin-top:4px;color:#424245">• ${rec.day1}${rec.period1}교시 <b>${rec.subj1}</b>(${rec.room1}실) → ${rec.teacher2}이(가) 대신 수업</div>`;
+      h+=`<div style="color:#424245">• ${rec.day2}${rec.period2}교시 <b>${rec.subj2}</b>(${rec.room2}실) → ${rec.teacher1}이(가) 대신 수업</div>`;
+      h+='</div>';
+    }else{
+      h+='<div style="background:'+bgColor+';border-radius:8px;padding:10px;font-size:12px;line-height:1.6">';
+      h+=`<div><b>${rec.day}${rec.period}교시</b> · <b>${rec.subj}</b>(${rec.room}실)</div>`;
+      h+=`<div style="margin-top:4px;color:#424245">${rec.teacher} 선생님 수업 → <b style="color:#e65100">${rec.substitute}</b> 선생님 대강</div>`;
+      if(rec.reason)h+=`<div style="margin-top:4px;color:#86868b;font-size:11px">사유: ${rec.reason}</div>`;
+      h+='</div>';
+    }
+    h+='</div>';
+  });
+  
+  return h;
+}
+
+function confirmDeleteRecord(date, id){
+  if(!confirm("이 기록을 삭제하시겠습니까?\n삭제하면 시간표에서도 제거됩니다."))return;
+  deleteRecord(date, id).then(()=>{
+    // Records will auto-update via onValue listener
+  }).catch(e=>alert("삭제 실패: "+e.message));
+}
+
 // ========== Main Render ==========
 function render(){
   const app=document.getElementById('app');
@@ -844,6 +1380,7 @@ function render(){
   else if(TAB==="heatmap")h+=renderHeatmapTab();
   else if(TAB==="event")h+=renderEventTab();
   else if(TAB==="view")h+=renderViewTab();
+  else if(TAB==="records")h+=renderRecordsTab();
   h+='</div>';
   h+=renderBottomNav();
   app.innerHTML=h;
