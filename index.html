@@ -1030,6 +1030,8 @@ function confirmSwap(d){
 
 // Cross-week swap: user selected their slot, now pick target week + slot
 let CROSS_SWAP_STATE = null;
+let RECORDS_VIEW_TEACHER = null; // index of teacher to preview in records tab
+function setRecordsViewTeacher(i){RECORDS_VIEW_TEACHER=i;render()}
 function openCrossWeekSwap(myInfo){
   CROSS_SWAP_STATE = {myInfo, targetWeek: getWeekStart(VIEW_DATE)};
   renderCrossWeekSheet();
@@ -1447,13 +1449,31 @@ function renderEventTab(){
 
 // ========== TAB: 시간표 보기 ==========
 function renderViewTab(){
-  let h='<div class="card"><div class="help-text">💡 선생님 선택 → 주간 시간표 조회</div>';
+  let h='';
+  // Week selector
+  const weekStart = getWeekStart(VIEW_DATE);
+  const weekCount = (RECORDS[weekStart] && Object.keys(RECORDS[weekStart]).length) || 0;
+  h+='<div class="card" style="padding:10px 12px;margin-bottom:8px">';
+  h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">';
+  h+=`<div style="font-size:11px;font-weight:700;color:#1a237e">📅 조회 주: <b>${formatWeek(VIEW_DATE)}</b></div>`;
+  if(weekCount>0)h+=`<span style="background:#e65100;color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700">변경 ${weekCount}건</span>`;
+  h+='</div>';
+  h+='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">';
+  h+=`<input type="date" value="${VIEW_DATE}" onchange="VIEW_DATE=this.value;render()" style="flex:1;min-width:140px;padding:6px 8px;border-radius:6px;border:1px solid #e5e5ea;font-size:12px;font-family:inherit">`;
+  h+=`<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="VIEW_DATE=todayStr();render()">이번주</button>`;
+  h+=`<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="const d=new Date(VIEW_DATE);d.setDate(d.getDate()-7);VIEW_DATE=d.toISOString().slice(0,10);render()">◀</button>`;
+  h+=`<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="const d=new Date(VIEW_DATE);d.setDate(d.getDate()+7);VIEW_DATE=d.toISOString().slice(0,10);render()">▶</button>`;
+  h+='</div></div>';
+  
+  h+='<div class="card"><div class="help-text">💡 선생님 선택 → 해당 주의 시간표 조회 (변경사항 자동 반영)</div>';
   h+=renderSearchAndTeachers('setMe',ME);
   h+='</div>';
   if(ME!==null){
     const t=T[ME];
-    h+=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div><div style="font-size:15px;font-weight:700">${t.n}${deptTag(t)}</div><div style="font-size:11px;color:#86868b">${t.h}시수</div></div></div>`;
-    h+=renderTimetable(t,null,null,null);
+    const {teacher:tEff, changes:tChanges}=getTeacherWithOverrides(t, weekStart);
+    const changeCount=Object.keys(tChanges).length;
+    h+=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div><div style="font-size:15px;font-weight:700">${t.n}${deptTag(t)}</div><div style="font-size:11px;color:#86868b">${t.h}시수${changeCount>0?' · <span style="color:#e65100;font-weight:700">이 주 변경 '+changeCount+'건</span>':''}</div></div></div>`;
+    h+=renderTimetableWithChanges(tEff,null,null,tChanges);
     h+='</div>';
   }
   return h;
@@ -1557,6 +1577,36 @@ function renderRecordsTab(){
     }
     h+='</div>';
   });
+  
+  // 교사 선택해서 시간표 미리보기
+  h+='<div class="card" style="margin-top:10px">';
+  h+='<div class="card-title">📋 이 주의 시간표 미리보기</div>';
+  h+='<div class="help-text">💡 선생님을 선택하면 <b>이 주의 변경사항이 반영된 시간표</b>를 볼 수 있어요. 주황 테두리가 변경된 칸입니다.</div>';
+  h+='<div class="pill-wrap" style="max-height:160px;overflow-y:auto">';
+  T.forEach((t,i)=>{
+    const active=RECORDS_VIEW_TEACHER===i;
+    // Check if this teacher is affected by any record this week
+    const isAffected = recordList.some(([id,rec])=>{
+      if(rec.type==="sub")return rec.teacher===t.n||rec.substitute===t.n;
+      if(rec.type==="swap")return rec.teacher1===t.n||rec.teacher2===t.n;
+      return false;
+    });
+    h+=`<button class="pill${active?' active':''}" onclick="setRecordsViewTeacher(${i})" style="${isAffected?'border-color:#e65100;border-width:2px':''}">${isAffected?'🔶 ':''}${t.n}<span class="tag">${t.h}h</span></button>`;
+  });
+  h+='</div>';
+  
+  if(RECORDS_VIEW_TEACHER!==null){
+    const pt=T[RECORDS_VIEW_TEACHER];
+    const {teacher:ptEff, changes:ptChanges}=getTeacherWithOverrides(pt, weekStart);
+    const changeCount=Object.keys(ptChanges).length;
+    h+=`<div style="display:flex;align-items:center;gap:8px;margin:10px 0 6px;flex-wrap:wrap">`;
+    h+=`<div style="font-size:14px;font-weight:700">${pt.n}${deptTag(pt)}</div>`;
+    if(changeCount>0)h+=`<span style="background:#e65100;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">이 주 변경 ${changeCount}건</span>`;
+    else h+=`<span style="background:#e8f5e9;color:#2e7d32;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">변경 없음</span>`;
+    h+=`</div>`;
+    h+=renderTimetableWithChanges(ptEff,null,null,ptChanges);
+  }
+  h+='</div>';
   
   return h;
 }
