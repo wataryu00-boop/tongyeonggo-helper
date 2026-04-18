@@ -506,14 +506,20 @@ function setupFirebase(){
       } else if(profile.status){
         APPROVAL_STATUS = profile.status;
       } else {
-        // New user - register as pending
+        // New user - register as pending with real name
         APPROVAL_STATUS = "pending";
         try{
-          await window.fb.set(`users/${user.uid}`, {
+          const newProfile = {
             email: user.email,
             status: "pending",
             registeredAt: new Date().toISOString()
-          });
+          };
+          // Save real name if provided during signup
+          if(PENDING_SIGNUP_NAME){
+            newProfile.registeredName = PENDING_SIGNUP_NAME;
+            PENDING_SIGNUP_NAME = null;
+          }
+          await window.fb.set(`users/${user.uid}`, newProfile);
         }catch(e){
           console.error("대기 상태 저장 실패:", e);
         }
@@ -581,13 +587,17 @@ function setupFirebase(){
 }
 
 // Auth helper functions
-async function handleSignUp(email, password){
+let PENDING_SIGNUP_NAME = null; // temporarily holds real name during signup flow
+
+async function handleSignUp(email, password, realName){
   AUTH_ERROR = "";
   if(password.length < 6){AUTH_ERROR="비밀번호는 6자 이상이어야 합니다";render();return}
   try{
+    PENDING_SIGNUP_NAME = realName;
     await window.fb.signUp(email, password);
-    // Auth state change will trigger render with new user
+    // Auth state change will save registeredName from PENDING_SIGNUP_NAME
   }catch(e){
+    PENDING_SIGNUP_NAME = null;
     AUTH_ERROR = translateAuthError(e);
     render();
   }
@@ -761,11 +771,21 @@ function showProfileSheet(){
 
   
   // 프로필 요약 카드
+  const myProfile = ALL_USERS[CURRENT_USER.uid] || {};
+  const regName = myProfile.registeredName;
   body += '<div class="profile-card">';
   body += `<div class="profile-row"><span class="profile-label">📧 이메일</span><span class="profile-value">${CURRENT_USER.email}${adminBadge}</span></div>`;
-  body += `<div class="profile-row"><span class="profile-label">👤 이름</span><span class="profile-value">${myName || '<span style="color:#c62828">미설정</span>'}</span></div>`;
+  if(regName){
+    body += `<div class="profile-row"><span class="profile-label">🆔 가입 실명</span><span class="profile-value" style="color:#1a237e">${regName}</span></div>`;
+  }
+  body += `<div class="profile-row"><span class="profile-label">👤 선택 이름</span><span class="profile-value">${myName || '<span style="color:#c62828">미설정</span>'}</span></div>`;
   body += `<div class="profile-row"><span class="profile-label">🎯 담임 반</span><span class="profile-value">${myHomeroom || '<span style="color:#86868b">없음</span>'}</span></div>`;
   body += '</div>';
+  
+  // 이름 불일치 경고
+  if(regName && myName && regName !== myName){
+    body += `<div class="auth-error" style="margin-bottom:10px">⚠️ <b>가입 실명(${regName})</b>과 <b>선택한 이름(${myName})</b>이 다릅니다.<br>정확한 이름을 선택해주세요. 관리자에게 알림이 갈 수 있습니다.</div>`;
+  }
   
   // 섹션 1: 이름 선택
   body += '<details open style="margin-bottom:10px"><summary style="font-size:13px;font-weight:700;padding:8px 0;cursor:pointer;color:#1a237e">👤 이름 변경 / 설정</summary>';
@@ -774,6 +794,7 @@ function showProfileSheet(){
   body += '<div id="teacherPillList" style="display:flex;flex-wrap:wrap;gap:5px;max-height:220px;overflow-y:auto;padding:4px">';
   T.forEach(t=>{
     const active = t.n === myName;
+    const isRegName = regName && t.n === regName;
     // Check if this name is taken by another user
     const conflict = Object.entries(ALL_USERS).find(([uid,p]) => uid !== CURRENT_USER.uid && p && p.teacherName === t.n);
     let style = "";
@@ -781,8 +802,12 @@ function showProfileSheet(){
     if(conflict){
       style = "opacity:.5;border-color:#c62828;background:#ffebee";
       title = `이미 ${conflict[1].email}이 사용 중`;
+    } else if(isRegName && !active){
+      style = "border:2px solid #2e7d32;background:#e8f5e9;color:#1b5e20;font-weight:700";
+      title = "가입 시 입력한 실명과 일치 (추천)";
     }
-    body += `<button class="teacher-select-pill${active?" active":""}" data-tname="${t.n}" onclick="saveProfile('${t.n}')" style="${style}" title="${title}">${t.n}<span style="font-size:10px;opacity:.7;margin-left:2px">${t.d}</span></button>`;
+    const suffix = isRegName ? ' ⭐' : '';
+    body += `<button class="teacher-select-pill${active?" active":""}" data-tname="${t.n}" onclick="saveProfile('${t.n}')" style="${style}" title="${title}">${t.n}${suffix}<span style="font-size:10px;opacity:.7;margin-left:2px">${t.d}</span></button>`;
   });
   body += '</div></div></details>';
   
@@ -2396,14 +2421,27 @@ function renderAdminTab(){
     
     pendingUsers.forEach(([uid,p])=>{
       h+='<div style="background:#fff;border:1px solid #ffe082;border-radius:10px;padding:12px;margin-bottom:6px">';
-      h+='<div style="display:flex;justify-content:space-between;align-items:start;gap:8px;margin-bottom:8px">';
-      h+='<div style="flex:1;min-width:0">';
-      h+=`<div style="font-size:13px;font-weight:700;color:#e65100">📧 ${p&&p.email||uid}</div>`;
+      h+='<div style="margin-bottom:8px">';
+      const regName = p && p.registeredName;
+      if(regName){
+        // Check if this name matches any teacher in T (basic validation)
+        const matchedTeacher = T.find(t => t.n === regName);
+        h+=`<div style="font-size:18px;font-weight:800;color:#1a237e;margin-bottom:4px">👤 ${regName}`;
+        if(matchedTeacher){
+          h+=` <span style="background:#e8f5e9;color:#2e7d32;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700">✓ 교사명부 일치 (${matchedTeacher.d})</span>`;
+        } else {
+          h+=` <span style="background:#ffebee;color:#c62828;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700">⚠️ 교사명부 불일치</span>`;
+        }
+        h+='</div>';
+      } else {
+        h+=`<div style="font-size:14px;font-weight:700;color:#c62828;margin-bottom:4px">⚠️ 실명 미입력 (구버전 가입)</div>`;
+      }
+      h+=`<div style="font-size:12px;color:#424245">📧 ${p&&p.email||uid}</div>`;
       if(p&&p.registeredAt){
         const t=new Date(p.registeredAt);
-        h+=`<div style="font-size:10px;color:#86868b;margin-top:2px">가입: ${t.toLocaleString('ko-KR',{hour12:false})}</div>`;
+        h+=`<div style="font-size:10px;color:#86868b;margin-top:2px">가입 시각: ${t.toLocaleString('ko-KR',{hour12:false})}</div>`;
       }
-      h+='</div></div>';
+      h+='</div>';
       h+='<div style="display:flex;gap:6px">';
       h+=`<button class="btn btn-sm" style="flex:1;background:#2e7d32" onclick="adminApproveUser('${uid}')">✅ 승인</button>`;
       h+=`<button class="btn btn-sm" style="flex:1;background:#fff;color:#c62828;border:1px solid #ef5350" onclick="adminRejectUser('${uid}')">🚫 거부</button>`;
@@ -2491,6 +2529,13 @@ function renderAdminTab(){
       // 이름 변경
       h+='<div style="margin-bottom:10px">';
       h+='<div style="font-size:11px;font-weight:700;color:#86868b;margin-bottom:4px">👤 이름</div>';
+      if(p && p.registeredName){
+        const match = p.teacherName === p.registeredName;
+        const matchEmoji = match ? '✓' : '⚠️';
+        const matchBg = match ? '#e8f5e9' : '#fff3e0';
+        const matchColor = match ? '#2e7d32' : '#e65100';
+        h+=`<div style="background:${matchBg};color:${matchColor};padding:6px 10px;border-radius:6px;font-size:11px;margin-bottom:6px">${matchEmoji} 가입 시 입력 실명: <b>${p.registeredName}</b>${!match && p.teacherName ? `<br>선택한 이름(${p.teacherName})과 <b>다릅니다</b>` : ""}</div>`;
+      }
       h+=`<input type="text" id="adminName_${uid}" value="${hasName?p.teacherName:''}" placeholder="이름 (빈칸=해제)" class="auth-input" style="margin-bottom:4px;padding:8px 12px;font-size:13px">`;
       h+=`<div style="display:flex;flex-wrap:wrap;gap:3px;max-height:100px;overflow-y:auto;margin-bottom:6px">`;
       T.forEach(t=>{
@@ -2590,6 +2635,8 @@ function renderAuthScreen(){
     h += '<button class="auth-btn auth-btn-secondary" onclick="AUTH_MODE=\'reset\';AUTH_ERROR=\'\';render()">비밀번호를 잊어버리셨나요?</button>';
     h += '<div class="auth-switch">계정이 없으신가요? <a onclick="AUTH_MODE=\'signup\';AUTH_ERROR=\'\';render()">가입하기</a></div>';
   } else if(AUTH_MODE === "signup"){
+    h += '<div style="background:#fff8e1;color:#5d4037;padding:8px 10px;border-radius:8px;font-size:11px;margin-bottom:10px;line-height:1.5">💡 가입 시 <b>실명</b>을 정확히 입력해주세요. 관리자가 승인 시 참고하는 정보입니다.</div>';
+    h += '<input type="text" id="authRealName" class="auth-input" placeholder="실명 (예: 박효덕)" autocomplete="name">';
     h += '<input type="email" id="authEmail" class="auth-input" placeholder="이메일" autocomplete="email" inputmode="email">';
     h += '<input type="password" id="authPassword" class="auth-input" placeholder="비밀번호 (6자 이상)" autocomplete="new-password">';
     h += '<input type="password" id="authPassword2" class="auth-input" placeholder="비밀번호 확인" autocomplete="new-password">';
@@ -2623,12 +2670,15 @@ function submitSignIn(){
 }
 
 function submitSignUp(){
+  const realName = document.getElementById('authRealName').value.trim();
   const email = document.getElementById('authEmail').value.trim();
   const password = document.getElementById('authPassword').value;
   const password2 = document.getElementById('authPassword2').value;
+  if(!realName){AUTH_ERROR="실명을 입력해주세요";render();return}
+  if(realName.length < 2){AUTH_ERROR="실명은 2자 이상이어야 합니다";render();return}
   if(!email || !password){AUTH_ERROR="이메일과 비밀번호를 입력하세요";render();return}
   if(password !== password2){AUTH_ERROR="비밀번호가 일치하지 않습니다";render();return}
-  handleSignUp(email, password);
+  handleSignUp(email, password, realName);
 }
 
 function submitReset(){
@@ -2649,10 +2699,15 @@ function renderPendingScreen(){
   h += '<div class="auth-subtitle" style="line-height:1.6">관리자의 승인이 필요합니다</div>';
   
   h += '<div class="auth-card">';
+  const myProfile = ALL_USERS[CURRENT_USER.uid] || {};
+  const regName = myProfile.registeredName || null;
   h += `<div style="background:#fff8e1;color:#5d4037;padding:12px;border-radius:10px;font-size:12px;line-height:1.6;margin-bottom:12px">`;
+  if(regName){
+    h += `<b>👤 가입 이름</b><br>${regName}<br><br>`;
+  }
   h += `<b>📧 가입 이메일</b><br>${CURRENT_USER.email}<br><br>`;
   h += `<b>⏳ 상태</b><br>관리자 승인 대기중<br><br>`;
-  h += `<b>📝 다음 단계</b><br>관리자(${ADMIN_EMAILS[0]})에게 본인 이메일로 가입했다고 알려주세요. 승인되면 앱을 사용할 수 있습니다.`;
+  h += `<b>📝 다음 단계</b><br>관리자(${ADMIN_EMAILS[0]})에게 본인이 가입했다고 알려주세요. 승인되면 앱을 사용할 수 있습니다.`;
   h += `</div>`;
   h += '<button class="auth-btn" onclick="checkApprovalStatus()">🔄 승인 상태 새로고침</button>';
   h += '<button class="auth-btn auth-btn-secondary" onclick="handleSignOut()">로그아웃</button>';
