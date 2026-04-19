@@ -392,6 +392,12 @@ let NIGHT_BULK_IMPORT_OPEN = false; // 일괄 입력 모달
 let NIGHT_MGR_WEEK = null; // 명단 관리에서 편집 중인 주차 (null=최신 주차)
 let NIGHT_EDIT_STUDENT = null; // 편집 중인 학생 ID (null=편집 아님)
 
+// 학사일정
+let SCHOOL_EVENTS = {}; // {date: {eventId: {...}}}
+let EVENT_MONTH = null; // "YYYY-MM" 달력 표시 월
+let EVENT_EDIT = null; // {date, eventId} 편집 중
+let EVENT_ADD_DATE = null; // 추가 모달 열린 날짜
+
 // Admin tab state
 let ADMIN_EDIT_UID = null;
 
@@ -578,6 +584,15 @@ function setupFirebase(){
         NIGHT_STUDENTS = snapshot.val() || {};
         if(TAB === "night") renderPreservingScroll();
         else render();
+      });
+      // Listen for school events
+      window.fb.onValue("schoolEvents", (snapshot) => {
+        SCHOOL_EVENTS = snapshot.val() || {};
+        if(TAB === "events" || TAB === "home" || TAB === "swap" || TAB === "night" || TAB === "attendance"){
+          renderPreservingScroll();
+        } else {
+          render();
+        }
       });
       // Listen for night attendance records
       window.fb.onValue("nightAttendance", (snapshot) => {
@@ -960,6 +975,29 @@ function saveRecord(record, weekStart){
     return Promise.reject();
   }
   const wk = weekStart || record.week || getWeekStart(todayStr());
+  
+  // 학사일정 체크: 수업 영향 있는 날짜는 교체/대강 불가
+  // 크로스위크 교체는 week1/week2+day1/day2, 단일은 week+day
+  const checkDates = [];
+  if(record.day1 && (record.week1 || wk)){
+    const d = dayCharToDate(record.week1 || wk, record.day1);
+    if(d) checkDates.push(d);
+  }
+  if(record.day2 && (record.week2 || wk)){
+    const d = dayCharToDate(record.week2 || wk, record.day2);
+    if(d) checkDates.push(d);
+  }
+  if(record.day && !record.day1){
+    const d = dayCharToDate(wk, record.day);
+    if(d) checkDates.push(d);
+  }
+  for(const cd of checkDates){
+    if(isClassBlocked(cd)){
+      const reason = getBlockReason(cd, null, 'class');
+      alert(`⚠️ ${cd} 날짜는 학사일정으로 인해 수업 교체/대강을 할 수 없습니다.\n\n사유: ${reason}\n\n학사일정 탭에서 해당 일정의 "수업 영향" 체크를 해제하면 교체 가능합니다.`);
+      return Promise.reject(new Error("학사일정으로 차단됨"));
+    }
+  }
   return window.fb.push(`overrides/${wk}`, {
     ...record,
     storedAt: wk,
@@ -984,9 +1022,11 @@ const NAV_PRIMARY=[
   {id:"home",icon:"🏠",label:"오늘"},
   {id:"swap",icon:"🔄",label:"교체"},
   {id:"myclass",icon:"🎯",label:"우리반"},
-  {id:"night",icon:"🌙",label:"야자"}
+  {id:"night",icon:"🌙",label:"감독"},
+  {id:"attendance",icon:"📋",label:"출석"}
 ];
 const NAV_MORE=[
+  {id:"events",icon:"📅",label:"학사일정"},
   {id:"find",icon:"🔍",label:"시간별 공강"},
   {id:"records",icon:"📝",label:"교체/대강 기록"},
   {id:"common",icon:"👥",label:"공통 공강"},
@@ -1218,13 +1258,13 @@ function getYesterdayNightAbsentees(){
   
   // 해당 날짜의 출석 기록
   const dateData = NIGHT_ATTENDANCE[date] && NIGHT_ATTENDANCE[date][grade];
-  if(!dateData) return {date, grade, homeroom: hr, absentees: [], notChecked: [], totalApplied: 0};
+  if(!dateData) return {date, grade, homeroom: hr, absentees: [], notChecked: [], totalApplied: 0, checkDate: check};
   
   // 해당 주차의 명단 (본인 담임반만)
   const weekStart = getEffectiveWeekForDate(grade, date);
-  if(!weekStart) return {date, grade, homeroom: hr, absentees: [], notChecked: [], totalApplied: 0};
+  if(!weekStart) return {date, grade, homeroom: hr, absentees: [], notChecked: [], totalApplied: 0, checkDate: check};
   const weekStudents = NIGHT_STUDENTS[grade] && NIGHT_STUDENTS[grade][weekStart];
-  if(!weekStudents) return {date, grade, homeroom: hr, absentees: [], notChecked: [], totalApplied: 0};
+  if(!weekStudents) return {date, grade, homeroom: hr, absentees: [], notChecked: [], totalApplied: 0, checkDate: check};
   
   const myClassStudents = Object.entries(weekStudents)
     .map(([id,s])=>({id,...s}))
@@ -1274,14 +1314,19 @@ function renderHomeTab(){
   // 어제 야자 결석자 (본인 담임반)
   const absentInfo = getYesterdayNightAbsentees();
   if(absentInfo){
-    const {date, absentees, notChecked, totalApplied, checkDate, homeroom} = absentInfo;
+    const {date, absentees, notChecked, totalApplied, homeroom} = absentInfo;
+    let checkDate = absentInfo.checkDate;
+    if(!checkDate && date){
+      const [y,m,d] = date.split('-').map(Number);
+      checkDate = new Date(y, m-1, d);
+    }
     const [dy,dm,dd] = date.split('-');
-    const dow = ['일','월','화','수','목','금','토'][checkDate.getDay()];
+    const dow = checkDate ? ['일','월','화','수','목','금','토'][checkDate.getDay()] : '';
     
     h += '<div class="card" style="border:2px solid #c62828;background:#ffebee">';
     h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px">';
     h += `<div style="font-size:14px;font-weight:700;color:#c62828">⚠️ ${parseInt(dm)}/${parseInt(dd)} (${dow}) 야자 결석자 · ${homeroom}</div>`;
-    h += `<button class="btn btn-sm btn-outline" style="font-size:11px;color:#1565c0;border-color:#90caf9" onclick="openAttendance('${date}',${absentInfo.grade});setTab('night')">📋 출석부 이동</button>`;
+    h += `<button class="btn btn-sm btn-outline" style="font-size:11px;color:#1565c0;border-color:#90caf9" onclick="jumpToAttendance('${date}',${absentInfo.grade})">📋 출석부로 이동</button>`;
     h += '</div>';
     
     if(totalApplied === 0){
@@ -1351,16 +1396,53 @@ function renderHomeTab(){
     h += '</div>';
   }
   
+  // 오늘의 학사일정 (본인 담임반 학년 + 전체 학년 이벤트)
+  let myGrade = null;
+  if(CURRENT_USER && CURRENT_USER.homeroom){
+    const hr = CURRENT_USER.homeroom;
+    if(/^\d-\d+$/.test(hr)) myGrade = parseInt(hr.split('-')[0]);
+    else if(hr.startsWith('head-')) myGrade = parseInt(hr.split('-')[1]);
+  }
+  const todayEvents = getEventsForDate(today, myGrade);
+  if(todayEvents.length > 0){
+    h += '<div class="card" style="border-left:4px solid #6a1b9a">';
+    const gNote = myGrade ? ` (${myGrade}학년 + 전체)` : '';
+    h += `<div style="font-size:12px;font-weight:700;color:#4a148c;margin-bottom:6px">📅 오늘 학사일정${gNote} (${todayEvents.length})</div>`;
+    todayEvents.forEach(ev=>{
+      const eInfo = getEventTypeInfo(ev.type);
+      h += `<div style="background:${eInfo.bg};color:${eInfo.color};padding:6px 10px;border-radius:6px;margin-bottom:4px;font-size:12px;font-weight:600">${eInfo.emoji} ${ev.title}`;
+      const tags = [];
+      if(ev.grades && ev.grades.length > 0) tags.push(formatGrades(ev.grades));
+      if(ev.affectsClasses) tags.push('수업영향');
+      if(ev.affectsNight) tags.push('야자영향');
+      if(tags.length > 0) h += ` <span style="font-size:10px;opacity:.7">(${tags.join(', ')})</span>`;
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+  
   // 본인 시간표 (이번 주 교체 반영)
   if(myT){
     h += '<div class="card">';
     h += `<div class="card-title">📅 ${myT.n} 선생님 시간표 (이번 주)</div>`;
-    const weekStart = getWeekStart(todayStr());
-    const {teacher: effTeacher, changes: myChanges} = getTeacherWithOverrides(myT, weekStart);
-    h += renderTimetableWithChanges(effTeacher, null, null, myChanges);
-    const changeCount = Object.keys(myChanges || {}).length;
-    if(changeCount > 0){
-      h += `<div style="font-size:11px;color:#e65100;margin-top:6px;text-align:center">🔄 이번 주 ${changeCount}건 변경 있음 (주황 테두리)</div>`;
+    try {
+      const weekStart = getWeekStart(todayStr());
+      const result = getTeacherWithOverrides(myT, weekStart);
+      const effTeacher = (result && result.teacher) || myT;
+      const myChanges = (result && result.changes) || {};
+      h += renderTimetableWithChanges(effTeacher, null, null, myChanges);
+      const changeCount = Object.keys(myChanges).length;
+      if(changeCount > 0){
+        h += `<div style="font-size:11px;color:#e65100;margin-top:6px;text-align:center">🔄 이번 주 ${changeCount}건 변경 있음 (주황 테두리)</div>`;
+      }
+    } catch(e) {
+      console.error("시간표 로드 실패:", e);
+      // 교체 반영 실패 시 기본 시간표 표시
+      try {
+        h += renderTimetableWithChanges(myT, null, null, {});
+      } catch(e2) {
+        h += `<div style="padding:10px;color:#c62828;font-size:12px">시간표 표시 실패: ${e2.message}</div>`;
+      }
     }
     h += '</div>';
   } else {
@@ -1370,8 +1452,10 @@ function renderHomeTab(){
   }
   
   // 빠른 액세스
-  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px">';
-  h += `<button class="btn btn-outline" style="padding:12px" onclick="setTab('night')">🌙 야자 감독/출석</button>`;
+  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px;margin-top:10px">';
+  h += `<button class="btn btn-outline" style="padding:12px" onclick="setTab('events')">📅 학사일정</button>`;
+  h += `<button class="btn btn-outline" style="padding:12px" onclick="setTab('night')">🌙 야자 감독</button>`;
+  h += `<button class="btn btn-outline" style="padding:12px" onclick="setTab('attendance')">📋 야자 출석</button>`;
   h += `<button class="btn btn-outline" style="padding:12px" onclick="setTab('swap')">🔄 수업 교체</button>`;
   h += '</div>';
   
@@ -1408,6 +1492,28 @@ function renderSwapTab(){
   }
   const myT_orig=T[ME];
   const {teacher: myT, changes: myChanges} = getTeacherWithOverrides(myT_orig, weekStart);
+  
+  // 이번 주 학사일정 배너 (수업 영향 있는 것만)
+  const weekEvents = [];
+  for(let i=0;i<5;i++){
+    const d = new Date(weekStart);
+    d.setDate(d.getDate()+i);
+    const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    getClassAffectingEvents(ds).forEach(ev=>{
+      weekEvents.push({...ev, date: ds, dayChar: ['일','월','화','수','목','금','토'][d.getDay()]});
+    });
+  }
+  if(weekEvents.length > 0){
+    h += '<div class="card" style="border-left:4px solid #c62828;background:#fff8f8;margin-bottom:8px">';
+    h += `<div style="font-size:12px;font-weight:700;color:#c62828;margin-bottom:6px">📅 이번 주 수업 영향 일정 (${weekEvents.length})</div>`;
+    weekEvents.forEach(ev=>{
+      const eInfo = getEventTypeInfo(ev.type);
+      const [ey,em,ed] = ev.date.split('-');
+      h += `<div style="background:${eInfo.bg};color:${eInfo.color};padding:5px 10px;border-radius:6px;margin-bottom:3px;font-size:12px;font-weight:600">${eInfo.emoji} ${parseInt(em)}/${parseInt(ed)}(${ev.dayChar}) ${ev.title}</div>`;
+    });
+    h += '</div>';
+  }
+  
   h+=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div><div style="font-size:15px;font-weight:700">${myT.n}${deptTag(myT)}</div><div style="font-size:11px;color:#86868b;margin-top:2px">${myT.h}시수</div></div>`;
   const isMyself = CURRENT_USER && CURRENT_USER.teacherName === myT.n;
   h+=`<button class="btn btn-sec btn-sm" onclick="ME=null;SEL=null;ME_MANUAL_CLEAR=true;render()">${isMyself?'다른 교사':'변경'}</button></div>`;
@@ -2898,6 +3004,14 @@ function getNightTeacherStats(fromDate, toDate){
   return result; // [[name, count], ...]
 }
 
+// 출석 탭으로 이동하며 날짜/학년 세팅
+function jumpToAttendance(date, grade){
+  NIGHT_ATT_DATE = {date, grade};
+  NIGHT_GRADE = grade;
+  NIGHT_SWAP_TARGET = null;
+  setTab('attendance');
+}
+
 function openAttendance(date, grade){
   NIGHT_ATT_DATE = {date, grade};
   renderPreservingScroll();
@@ -2934,6 +3048,12 @@ function shiftAttendanceDate(grade, delta){
 }
 
 async function setNightSwapTarget(date, grade, slot){
+  // 학사일정 체크: 야자 영향 있는 날짜는 배정 불가
+  if(isNightBlocked(date, grade)){
+    const reason = getBlockReason(date, grade, 'night');
+    alert(`⚠️ 학사일정으로 인해 이 날짜는 야자 감독을 배정할 수 없습니다.\n\n사유: ${reason}\n\n감독 배정이 필요하면 학사일정 탭에서 해당 일정의 "야자 영향" 체크를 해제하세요.`);
+    return;
+  }
   // Bulk 모드에서 stamp가 선택돼 있으면 바로 배정/해제 (스크롤 유지)
   if(NIGHT_BULK_MODE && isNightAdmin()){
     if(NIGHT_STAMP_MODE === "erase"){
@@ -3131,6 +3251,13 @@ function countNightShiftsForTeacher(teacherName, fromDate, toDate){
 // bulk 모드면 로컬에만, 아니면 즉시 Firebase 저장
 async function saveNightAssignment(date, grade, slot, teacherName){
   if(!CURRENT_USER){alert("로그인 필요");return false}
+  
+  // 학사일정 체크 (빈 문자열로 해제는 허용)
+  if(teacherName && isNightBlocked(date, grade)){
+    const reason = getBlockReason(date, grade, 'night');
+    alert(`⚠️ 학사일정으로 인해 ${date} ${grade}학년 야자는 배정할 수 없습니다.\n사유: ${reason}`);
+    return false;
+  }
   
   // 권한 체크
   const current = getNightSupervisor(date, grade, slot);
@@ -3349,6 +3476,129 @@ async function fillRandomAssignments(){
 
 // ===== 야자 출석 관련 함수 =====
 
+// ===== 학사일정 =====
+
+// 기본 이벤트 타입 (+ 사용자 정의)
+const EVENT_TYPES = {
+  exam: {emoji:'🎓', label:'시험/모의고사', color:'#c62828', bg:'#ffebee', defAff:{cls:false, night:false}},
+  event: {emoji:'🎊', label:'행사', color:'#e65100', bg:'#fff3e0', defAff:{cls:true, night:true}},
+  holiday: {emoji:'🌴', label:'방학/공휴일', color:'#2e7d32', bg:'#e8f5e9', defAff:{cls:true, night:true}},
+  short: {emoji:'⏰', label:'단축수업', color:'#6a1b9a', bg:'#f3e5f5', defAff:{cls:false, night:true}},
+  field: {emoji:'🎯', label:'체험학습', color:'#1565c0', bg:'#e3f2fd', defAff:{cls:true, night:false}},
+  memo: {emoji:'📝', label:'메모', color:'#424245', bg:'#f5f5f7', defAff:{cls:false, night:false}},
+  custom: {emoji:'✨', label:'기타', color:'#00695c', bg:'#e0f2f1', defAff:{cls:false, night:false}}
+};
+
+function getEventTypeInfo(type){
+  return EVENT_TYPES[type] || EVENT_TYPES.custom;
+}
+
+// 학사일정 등록/수정 권한: 담임 + 학년부장 + 관리자
+function canManageEvents(){
+  if(!CURRENT_USER) return false;
+  if(isAdmin() || isNightAdmin()) return true;
+  const hr = CURRENT_USER.homeroom;
+  if(!hr) return false;
+  // 담임 (2-10 등) 또는 학년부장 (head-N)
+  if(/^\d-\d+$/.test(hr)) return true;
+  if(hr.startsWith('head-')) return true;
+  return false;
+}
+
+// 이벤트가 특정 학년에 영향을 주는지 체크
+// grades 배열이 없거나 비어있으면 "전체 학년" 영향으로 간주
+function eventAppliesToGrade(event, grade){
+  if(!grade) return true; // 학년 지정 없으면 모든 이벤트 포함
+  const gs = event.grades;
+  if(!gs || gs.length === 0) return true; // 전체 학년 영향
+  return gs.includes(grade);
+}
+
+// 특정 날짜-학년에 야자가 블록되었는지
+function isNightBlocked(date, grade){
+  return getNightAffectingEvents(date, grade).length > 0;
+}
+
+// 특정 날짜-학년에 수업이 블록되었는지
+function isClassBlocked(date, grade){
+  return getClassAffectingEvents(date, grade).length > 0;
+}
+
+// 블록 사유 문자열 생성
+function getBlockReason(date, grade, kind){
+  const events = kind === 'night' ? getNightAffectingEvents(date, grade) : getClassAffectingEvents(date, grade);
+  if(events.length === 0) return null;
+  const titles = events.map(e => `${getEventTypeInfo(e.type).emoji} ${e.title}`).join(', ');
+  return titles;
+}
+
+// 학년 배열을 읽기 좋게 포맷
+function formatGrades(grades){
+  if(!grades || grades.length === 0) return '전체 학년';
+  const sorted = grades.slice().sort();
+  return sorted.map(g=>g+'학년').join(',');
+}
+
+// 특정 날짜에 수업에 영향 주는 이벤트 (학년 필터 선택)
+function getClassAffectingEvents(date, grade){
+  const dateEvents = SCHOOL_EVENTS[date] || {};
+  return Object.entries(dateEvents)
+    .map(([id,e])=>({id,...e}))
+    .filter(e => e.affectsClasses && eventAppliesToGrade(e, grade));
+}
+
+// 특정 날짜에 야자에 영향 주는 이벤트 (학년 필터 선택)
+function getNightAffectingEvents(date, grade){
+  const dateEvents = SCHOOL_EVENTS[date] || {};
+  return Object.entries(dateEvents)
+    .map(([id,e])=>({id,...e}))
+    .filter(e => e.affectsNight && eventAppliesToGrade(e, grade));
+}
+
+// 특정 날짜의 모든 이벤트 (학년 필터 선택)
+function getEventsForDate(date, grade){
+  const dateEvents = SCHOOL_EVENTS[date] || {};
+  return Object.entries(dateEvents)
+    .map(([id,e])=>({id,...e}))
+    .filter(e => eventAppliesToGrade(e, grade))
+    .sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''));
+}
+
+// 이벤트 저장
+async function saveSchoolEvent(date, eventId, data){
+  if(!canManageEvents()){alert("학사일정 등록 권한이 없습니다 (담임/학년부장/관리자)");return false}
+  try{
+    const id = eventId || `ev_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+    const full = {
+      ...data,
+      updatedAt: new Date().toISOString(),
+      updatedBy: CURRENT_USER.teacherName || CURRENT_USER.email
+    };
+    if(!eventId){
+      full.createdAt = new Date().toISOString();
+      full.createdBy = CURRENT_USER.teacherName || CURRENT_USER.email;
+    }
+    await window.fb.set(`schoolEvents/${date}/${id}`, full);
+    return id;
+  }catch(e){
+    if(e.message && e.message.includes("PERMISSION_DENIED")){
+      alert("⚠️ Firebase 보안 규칙에 schoolEvents 경로를 추가해주세요");
+    } else {
+      alert("저장 실패: "+e.message);
+    }
+    return false;
+  }
+}
+
+// 이벤트 삭제
+async function deleteSchoolEvent(date, eventId){
+  if(!canManageEvents()){alert("권한 없음");return}
+  if(!confirm("이 학사일정을 삭제할까요?"))return;
+  try{
+    await window.fb.remove(`schoolEvents/${date}/${eventId}`);
+  }catch(e){alert("삭제 실패: "+e.message)}
+}
+
 // 학생 추가/수정 (주차별)
 async function saveNightStudent(grade, weekStart, studentId, data){
   if(!isNightAdmin()){alert("야자 관리자 권한 필요");return false}
@@ -3430,6 +3680,12 @@ async function saveAttendance(date, grade, period, studentId, status, note){
 
 // 순환 상태 변경
 async function cycleAttendance(date, grade, period, studentId){
+  // 학사일정 체크: 야자 영향 있는 날짜는 출석 체크 불가
+  if(isNightBlocked(date, grade)){
+    const reason = getBlockReason(date, grade, 'night');
+    alert(`⚠️ 학사일정으로 인해 이 날짜는 야자 출석 체크를 할 수 없습니다.\n\n사유: ${reason}`);
+    return;
+  }
   const current = (NIGHT_ATTENDANCE[date] && NIGHT_ATTENDANCE[date][grade] && NIGHT_ATTENDANCE[date][grade][period] && NIGHT_ATTENDANCE[date][grade][period][studentId]) || null;
   const currentStatus = current ? current.status : null;
   // 순환: 미체크 → 출석 → 미출석 → 인정 → 미체크
@@ -3626,10 +3882,27 @@ function renderStudentManager(grade){
   h += `<button class="btn btn-sm btn-outline" onclick="NIGHT_MGR_WEEK='${thisWeek}';renderPreservingScroll()">이번 주</button>`;
   h += '</div>';
   
-  // 현재 선택된 주차 표시
+  // 현재 선택된 주차 표시 + 자동 상속 상태 판단
+  const isRegistered = list.length > 0;
+  // 이 주차에 등록은 없지만, 이전 주차에서 상속되는 명단이 있는지 확인
+  const inheritedWeek = (!isRegistered) ? getEffectiveWeekForDate(grade, weekStart) : null;
+  const inheritedList = inheritedWeek ? getStudentsForWeek(grade, inheritedWeek) : [];
+  
   h += '<div style="background:#fff;padding:8px 12px;border-radius:8px;margin-bottom:6px">';
   h += `<div style="font-size:13px;font-weight:700;color:#1a237e">📆 편집 주차: ${weekStart} (${weekLabel}, 월~금)</div>`;
-  h += `<div style="font-size:11px;color:#86868b;margin-top:2px">이 주차부터 다음 변경 전까지 적용됩니다 · 현재 ${list.length}명 등록</div>`;
+  
+  if(isRegistered){
+    h += `<div style="font-size:11px;color:#2e7d32;margin-top:2px">✓ 이 주차 독립 등록됨 · ${list.length}명</div>`;
+  } else if(inheritedList.length > 0){
+    const [iy,im,id] = inheritedWeek.split('-').map(Number);
+    h += `<div style="font-size:11px;color:#1565c0;margin-top:2px;background:#e3f2fd;padding:6px 8px;border-radius:6px">`;
+    h += `🔗 <b>자동 상속 중</b>: ${im}/${id} 주차 명단 (${inheritedList.length}명) 사용`;
+    h += `</div>`;
+    h += `<div style="font-size:11px;color:#86868b;margin-top:4px">변경이 필요하면 아래 "이 주차에 명단 생성" 버튼을 눌러 복사 후 수정하세요.</div>`;
+    h += `<button class="btn btn-sm" style="width:100%;margin-top:6px;background:#1565c0;color:#fff" onclick="createWeekFromInherited(${grade},'${weekStart}','${inheritedWeek}')">📋 이 주차(${weekStart})에 명단 생성 (상속본 복사)</button>`;
+  } else {
+    h += `<div style="font-size:11px;color:#c62828;margin-top:2px;background:#ffebee;padding:6px 8px;border-radius:6px">⚠️ 이 주차 이전에 등록된 명단이 없습니다. 첫 명단을 등록하세요.</div>`;
+  }
   h += '</div>';
   
   // 등록된 주차 목록
@@ -3732,12 +4005,50 @@ function renderStudentManager(grade){
     h += `<div style="text-align:right;margin-bottom:8px"><button class="btn btn-sm btn-outline" style="color:#c62828;border-color:#ef5350;font-size:11px" onclick="deleteNightWeek(${grade},'${weekStart}')">🗑️ 이 주차 전체 삭제</button></div>`;
   }
   
-  // 명단 표시 (장소별 그룹화)
+  // 명단 표시 (장소별 그룹화) - 상속 중이면 상속된 명단을 read-only로 표시
   if(list.length === 0){
-    h += '<div style="padding:20px;text-align:center;color:#86868b;font-size:12px;background:#fafafa;border-radius:8px">';
-    h += `<div style="font-size:14px;margin-bottom:6px">📭 ${weekStart} 주차에 등록된 학생이 없습니다</div>`;
-    h += `<div style="font-size:11px">위에서 엑셀 업로드, 일괄 입력, 또는 개별 추가로 등록하세요</div>`;
-    h += '</div>';
+    if(inheritedList.length > 0){
+      // 상속된 명단을 읽기 전용으로 보여주기
+      const [iy,im,id2] = inheritedWeek.split('-').map(Number);
+      h += `<div style="background:#e3f2fd;padding:10px 12px;border-radius:8px;margin-bottom:8px;font-size:12px;color:#0d47a1">`;
+      h += `🔗 <b>상속 중인 명단 (${im}/${id2} 주차)</b> · ${inheritedList.length}명`;
+      h += `<div style="font-size:10px;color:#1565c0;margin-top:2px">수정하려면 위의 "이 주차에 명단 생성" 버튼을 눌러 복사 후 수정</div>`;
+      h += `</div>`;
+      
+      // 상속된 명단을 읽기 전용으로 렌더
+      const byPlaceR = {};
+      inheritedList.forEach(s=>{
+        const k = s.place || '(장소 미지정)';
+        if(!byPlaceR[k]) byPlaceR[k] = [];
+        byPlaceR[k].push(s);
+      });
+      h += '<div style="max-height:350px;overflow-y:auto;opacity:0.75">';
+      Object.keys(byPlaceR).sort().forEach(place=>{
+        h += `<div style="font-size:11px;font-weight:700;color:#1565c0;padding:4px 8px;background:#e3f2fd;border-radius:6px;margin-top:6px">📍 ${place} (${byPlaceR[place].length}명) <span style="font-weight:400;font-size:9px">(상속, 읽기 전용)</span></div>`;
+        h += '<table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:4px">';
+        h += '<thead><tr style="background:#f5f5f7">';
+        h += '<th style="padding:4px 6px;text-align:left">반</th><th style="padding:4px 6px">번호</th><th style="padding:4px 6px;text-align:left">이름</th>';
+        h += '<th style="padding:4px 6px;text-align:left">요일별 교시</th>';
+        h += '</tr></thead><tbody>';
+        byPlaceR[place].forEach(s=>{
+          const sched = normalizeStudentSchedule(s);
+          const schedText = formatSchedule(sched);
+          h += `<tr style="border-bottom:1px solid #f0f0f0">`;
+          h += `<td style="padding:4px 6px">${s.classNum||'-'}</td>`;
+          h += `<td style="padding:4px 6px;text-align:center">${s.number||'-'}</td>`;
+          h += `<td style="padding:4px 6px;font-weight:600">${s.name}</td>`;
+          h += `<td style="padding:4px 6px;font-size:10px;font-family:monospace">${schedText||'-'}</td>`;
+          h += '</tr>';
+        });
+        h += '</tbody></table>';
+      });
+      h += '</div>';
+    } else {
+      h += '<div style="padding:20px;text-align:center;color:#86868b;font-size:12px;background:#fafafa;border-radius:8px">';
+      h += `<div style="font-size:14px;margin-bottom:6px">📭 ${weekStart} 주차에 등록된 학생이 없습니다</div>`;
+      h += `<div style="font-size:11px">위에서 엑셀 업로드, 일괄 입력, 또는 개별 추가로 등록하세요</div>`;
+      h += '</div>';
+    }
   } else {
     const byPlace = {};
     list.forEach(s=>{
@@ -3758,18 +4069,58 @@ function renderStudentManager(grade){
         const isActive = s.active !== false;
         const sched = normalizeStudentSchedule(s);
         const schedText = formatSchedule(sched);
-        h += `<tr style="border-bottom:1px solid #f0f0f0;${!isActive?'opacity:.5':''}">`;
-        h += `<td style="padding:4px 6px">${s.classNum||'-'}</td>`;
-        h += `<td style="padding:4px 6px;text-align:center">${s.number||'-'}</td>`;
-        h += `<td style="padding:4px 6px;font-weight:600">${s.name}</td>`;
-        h += `<td style="padding:4px 6px;font-size:10px;font-family:monospace">${schedText||'<span style="color:#c62828">미신청</span>'}</td>`;
-        h += `<td style="padding:4px 6px;text-align:center">`;
-        h += `<button class="btn btn-sm btn-outline" style="font-size:9px;padding:2px 6px" onclick="toggleNightStudentActive(${grade},'${weekStart}','${s.id}')">${isActive?'✅':'⏸'}</button>`;
-        h += `</td>`;
-        h += `<td style="padding:4px 6px">`;
-        h += `<button class="btn btn-sm btn-outline" style="font-size:9px;padding:2px 6px;color:#c62828;border-color:#ef5350" onclick="deleteNightStudent(${grade},'${weekStart}','${s.id}')">✕</button>`;
-        h += `</td>`;
-        h += '</tr>';
+        const isEditing = NIGHT_EDIT_STUDENT === `${grade}|${weekStart}|${s.id}`;
+        
+        if(isEditing){
+          // 편집 모드 행
+          h += `<tr style="background:#fff8e1;border:2px solid #ffc107">`;
+          h += `<td colspan="6" style="padding:8px 10px">`;
+          h += `<div style="font-size:12px;font-weight:700;color:#e65100;margin-bottom:8px">✏️ 편집 중: ${s.classNum} ${s.number}번 ${s.name}</div>`;
+          
+          // 장소 편집
+          h += `<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">`;
+          h += `<span style="font-size:11px;color:#86868b;min-width:40px">장소:</span>`;
+          h += `<input type="text" id="editStu_place_${s.id}" value="${s.place||''}" placeholder="예: 도서관" class="auth-input" style="flex:1;padding:4px 8px;font-size:12px;margin:0">`;
+          h += `</div>`;
+          
+          // 요일별 교시 체크박스
+          h += `<div style="background:#fff;padding:8px;border-radius:6px;margin-bottom:8px">`;
+          h += `<div style="font-size:11px;color:#86868b;margin-bottom:6px">📅 요일별 신청 교시</div>`;
+          ['월','화','수','목','금'].forEach(d=>{
+            const periodsForDay = sched[d] || [];
+            h += `<div style="display:flex;gap:8px;align-items:center;padding:2px 0">`;
+            h += `<span style="font-size:12px;font-weight:700;color:#1a237e;width:30px">${d}</span>`;
+            [1,2,3].forEach(p=>{
+              const checked = periodsForDay.includes(p) ? 'checked' : '';
+              h += `<label style="font-size:11px;display:flex;align-items:center;gap:2px;cursor:pointer"><input type="checkbox" id="editStu_sched_${s.id}_${d}_${p}" ${checked}>${p}교시</label>`;
+            });
+            h += `</div>`;
+          });
+          h += `</div>`;
+          
+          // 저장/취소 버튼
+          h += `<div style="display:flex;gap:4px">`;
+          h += `<button class="btn btn-sm" style="flex:1;background:#2e7d32;color:#fff" onclick="saveStudentEdit(${grade},'${weekStart}','${s.id}')">💾 저장</button>`;
+          h += `<button class="btn btn-sm btn-outline" onclick="NIGHT_EDIT_STUDENT=null;renderPreservingScroll()">취소</button>`;
+          h += `</div>`;
+          
+          h += `</td></tr>`;
+        } else {
+          // 일반 행
+          h += `<tr style="border-bottom:1px solid #f0f0f0;${!isActive?'opacity:.5':''}">`;
+          h += `<td style="padding:4px 6px">${s.classNum||'-'}</td>`;
+          h += `<td style="padding:4px 6px;text-align:center">${s.number||'-'}</td>`;
+          h += `<td style="padding:4px 6px;font-weight:600">${s.name}</td>`;
+          h += `<td style="padding:4px 6px;font-size:10px;font-family:monospace">${schedText||'<span style="color:#c62828">미신청</span>'}</td>`;
+          h += `<td style="padding:4px 6px;text-align:center;white-space:nowrap">`;
+          h += `<button class="btn btn-sm btn-outline" style="font-size:9px;padding:2px 6px;color:#1565c0;border-color:#90caf9;margin-right:2px" onclick="startStudentEdit(${grade},'${weekStart}','${s.id}')" title="편집">✏️</button>`;
+          h += `<button class="btn btn-sm btn-outline" style="font-size:9px;padding:2px 6px" onclick="toggleNightStudentActive(${grade},'${weekStart}','${s.id}')" title="${isActive?'비활성화':'활성화'}">${isActive?'✅':'⏸'}</button>`;
+          h += `</td>`;
+          h += `<td style="padding:4px 6px">`;
+          h += `<button class="btn btn-sm btn-outline" style="font-size:9px;padding:2px 6px;color:#c62828;border-color:#ef5350" onclick="deleteNightStudent(${grade},'${weekStart}','${s.id}')" title="삭제">✕</button>`;
+          h += `</td>`;
+          h += '</tr>';
+        }
       });
       h += '</tbody></table>';
     });
@@ -3788,6 +4139,19 @@ function applyMgrWeekPicker(){
   // 해당 날짜의 월요일로 강제 이동
   NIGHT_MGR_WEEK = getWeekStart(val);
   renderPreservingScroll();
+}
+
+// 상속 받은 명단을 이 주차로 복사
+async function createWeekFromInherited(grade, targetWeek, sourceWeek){
+  if(!isNightAdmin()){alert("야자 관리자 권한 필요");return}
+  const srcList = getStudentsForWeek(grade, sourceWeek);
+  if(srcList.length === 0){alert("원본 명단이 비어있습니다");return}
+  if(!confirm(`${sourceWeek} 주차 명단 ${srcList.length}명을 ${targetWeek} 주차로 복사할까요?\n이 주차부터는 독립적으로 수정할 수 있습니다.`))return;
+  const ok = await copyWeekToNew(grade, sourceWeek, targetWeek);
+  if(ok){
+    NIGHT_MGR_WEEK = targetWeek;
+    renderPreservingScroll();
+  }
 }
 
 // 주차 복사 실행
@@ -4037,6 +4401,53 @@ function handleNightStudentsUpload(event, grade, weekStart){
   reader.readAsArrayBuffer(file);
 }
 
+// 학생 편집 시작
+function startStudentEdit(grade, weekStart, studentId){
+  NIGHT_EDIT_STUDENT = `${grade}|${weekStart}|${studentId}`;
+  renderPreservingScroll();
+}
+
+// 학생 편집 저장
+async function saveStudentEdit(grade, weekStart, studentId){
+  const existing = NIGHT_STUDENTS[grade] && NIGHT_STUDENTS[grade][weekStart] && NIGHT_STUDENTS[grade][weekStart][studentId];
+  if(!existing){alert("학생 정보를 찾을 수 없습니다");return}
+  
+  // 장소 읽기
+  const placeEl = document.getElementById(`editStu_place_${studentId}`);
+  const place = placeEl ? placeEl.value.trim() : '';
+  
+  // 요일별 교시 읽기
+  const schedule = {};
+  ['월','화','수','목','금'].forEach(d=>{
+    const periodsForDay = [1,2,3].filter(p=>{
+      const el = document.getElementById(`editStu_sched_${studentId}_${d}_${p}`);
+      return el && el.checked;
+    });
+    if(periodsForDay.length > 0) schedule[d] = periodsForDay;
+  });
+  
+  if(Object.keys(schedule).length === 0){
+    if(!confirm("요일별 교시가 모두 비어있습니다. 그래도 저장할까요? (학생이 모든 요일 미신청 상태가 됩니다)")) return;
+  }
+  
+  // 기존 데이터 유지 + 새 값 덮어쓰기 (name, classNum, number, active 보존)
+  const data = {
+    name: existing.name,
+    classNum: existing.classNum,
+    number: existing.number,
+    active: existing.active !== false,
+    schedule
+  };
+  if(place) data.place = place;
+  // 기존의 periods/days 필드는 자연스레 제거 (새 schedule로 통일)
+  
+  const ok = await saveNightStudent(grade, weekStart, studentId, data);
+  if(ok){
+    NIGHT_EDIT_STUDENT = null;
+    renderPreservingScroll();
+  }
+}
+
 async function addNightStudent(grade){
   const weekStart = NIGHT_MGR_WEEK;
   if(!weekStart){alert("먼저 적용 주차를 선택하세요");return}
@@ -4237,11 +4648,33 @@ function renderAttendanceSection(date, grade){
   }
   h += '</div>';
   
-  // 적용 주차 표시
+  // 야자 영향 이벤트 체크 (현재 학년만)
+  const nightEvs = getNightAffectingEvents(date, grade);
+  if(nightEvs.length > 0){
+    nightEvs.forEach(ev=>{
+      const eInfo = getEventTypeInfo(ev.type);
+      const gLabel = ev.grades && ev.grades.length > 0 ? ` · ${formatGrades(ev.grades)}` : '';
+      h += `<div style="background:${eInfo.bg};color:${eInfo.color};padding:10px 12px;border-radius:8px;margin-bottom:8px;border:2px solid ${eInfo.color};font-size:13px;font-weight:700">`;
+      h += `🚫 ${eInfo.emoji} ${ev.title}${gLabel}`;
+      if(ev.note) h += `<div style="font-size:11px;font-weight:400;margin-top:4px">${ev.note}</div>`;
+      h += `<div style="font-size:11px;font-weight:600;margin-top:6px;color:#c62828">🌙 이 날짜 ${grade}학년 야자는 진행되지 않습니다. 출석 체크 불가.</div>`;
+      h += `</div>`;
+    });
+    // 학생 목록 렌더링 스킵
+    return h;
+  }
+  
+  // 적용 주차 표시 (상속 여부)
   const effectiveWeek = getEffectiveWeekForDate(grade, date);
+  const dateWeekStart = getWeekStart(date);
   if(effectiveWeek){
     const [wy,wm,wd] = effectiveWeek.split('-').map(Number);
-    h += `<div style="font-size:10px;color:#86868b;margin-bottom:6px">📅 적용 명단: ${wm}/${wd} 주차</div>`;
+    const isInherited = effectiveWeek !== dateWeekStart;
+    if(isInherited){
+      h += `<div style="font-size:10px;color:#1565c0;margin-bottom:6px">📅 적용 명단: ${wm}/${wd} 주차 🔗 상속 중</div>`;
+    } else {
+      h += `<div style="font-size:10px;color:#86868b;margin-bottom:6px">📅 적용 명단: ${wm}/${wd} 주차</div>`;
+    }
   }
   
   if(allActive.length === 0){
@@ -4366,6 +4799,379 @@ function toggleBulkMode(){
   }
   render();
 }
+
+// ========== TAB: 학사일정 ==========
+function renderEventsTab(){
+  let h = '';
+  const today = todayStr();
+  
+  // 기본 달
+  if(!EVENT_MONTH){
+    const n = new Date();
+    EVENT_MONTH = `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}`;
+  }
+  const currentMonth = EVENT_MONTH;
+  
+  // 헤더
+  h += '<div class="class-badge" style="background:linear-gradient(135deg,#6a1b9a 0%,#4a148c 100%)">';
+  h += '<h3>📅 학사일정</h3>';
+  const [cy, cm] = currentMonth.split('-');
+  h += `<div class="sub">${cy}년 ${parseInt(cm)}월</div>`;
+  h += '</div>';
+  
+  // 월 이동
+  h += '<div class="card" style="padding:10px 12px;margin-bottom:8px">';
+  h += '<div style="display:flex;gap:6px;align-items:center">';
+  h += `<button class="qa-btn" style="padding:6px 12px;font-size:12px" onclick="changeEventMonth(-1)">◀ 이전달</button>`;
+  h += `<div style="flex:1;text-align:center;font-size:13px;font-weight:700;color:#4a148c">${currentMonth}</div>`;
+  h += `<button class="qa-btn" style="padding:6px 12px;font-size:12px" onclick="changeEventMonth(1)">다음달 ▶</button>`;
+  h += '</div>';
+  h += `<button class="qa-btn" style="width:100%;margin-top:4px;padding:5px;font-size:11px" onclick="EVENT_MONTH=null;render()">오늘로</button>`;
+  h += '</div>';
+  
+  // 권한 안내
+  if(!canManageEvents()){
+    h += '<div class="card" style="background:#fff3e0;padding:8px 12px;margin-bottom:8px">';
+    h += '<div style="font-size:11px;color:#e65100">💡 학사일정 등록/수정은 담임, 학년부장, 관리자만 가능합니다 (조회는 모두 가능)</div>';
+    h += '</div>';
+  }
+  
+  // 월간 달력 (월~금만, 요일 헤더 포함)
+  const weeks = getMonthWeeks(currentMonth);
+  h += '<div class="card">';
+  h += `<div class="card-title">📆 ${parseInt(cm)}월 일정</div>`;
+  h += '<div class="help-text">💡 날짜 클릭 → 일정 추가/편집 · 학사일정은 시간표와 야자에 연동됩니다</div>';
+  
+  // 요일 헤더
+  h += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:3px;margin-bottom:4px">';
+  ['월','화','수','목','금'].forEach(d=>{
+    h += `<div style="text-align:center;font-size:11px;font-weight:700;color:#86868b;padding:4px">${d}</div>`;
+  });
+  h += '</div>';
+  
+  weeks.forEach(week=>{
+    h += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:3px;margin-bottom:3px">';
+    week.forEach(dayInfo=>{
+      const isToday = dayInfo.date === today;
+      const events = getEventsForDate(dayInfo.date);
+      const bg = dayInfo.inMonth ? '#fff' : '#f5f5f7';
+      const border = isToday ? '#6a1b9a' : '#e5e5ea';
+      const opacity = dayInfo.inMonth ? 1 : 0.3;
+      const clickable = dayInfo.inMonth && canManageEvents();
+      
+      h += `<div onclick="${clickable?`EVENT_ADD_DATE='${dayInfo.date}';render()`:''}" style="background:${bg};border:2px solid ${border};border-radius:8px;padding:6px 4px;min-height:85px;opacity:${opacity};font-size:11px;cursor:${clickable?'pointer':'default'}">`;
+      h += `<div style="font-size:11px;font-weight:700;color:${isToday?'#6a1b9a':'#424245'};margin-bottom:4px">${dayInfo.dayNum}${isToday?' 📍':''}</div>`;
+      
+      if(dayInfo.inMonth && events.length > 0){
+        events.slice(0,3).forEach(ev=>{
+          const info = getEventTypeInfo(ev.type);
+          const gLabel = formatGrades(ev.grades);
+          const gPrefix = (ev.grades && ev.grades.length > 0 && ev.grades.length < 3) ? `[${ev.grades.join('')}] ` : '';
+          h += `<div style="background:${info.bg};color:${info.color};padding:2px 4px;border-radius:4px;margin-bottom:2px;font-size:10px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${ev.title} (${gLabel})${ev.affectsClasses?' · 수업영향':''}${ev.affectsNight?' · 야자영향':''}">${info.emoji}${gPrefix}${ev.title}</div>`;
+        });
+        if(events.length > 3){
+          h += `<div style="font-size:9px;color:#86868b;text-align:center">+${events.length-3}</div>`;
+        }
+      }
+      h += '</div>';
+    });
+    h += '</div>';
+  });
+  h += '</div>';
+  
+  // 이벤트 추가/편집 모달
+  if(EVENT_ADD_DATE){
+    h += renderEventEditor(EVENT_ADD_DATE);
+  }
+  
+  return h;
+}
+
+function changeEventMonth(delta){
+  const cur = EVENT_MONTH || (()=>{
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}`;
+  })();
+  const [y,m] = cur.split('-').map(Number);
+  const d = new Date(y, m-1+delta, 1);
+  EVENT_MONTH = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  render();
+}
+
+// 이벤트 편집 모달 (카드 형태)
+function renderEventEditor(date){
+  let h = '';
+  const existing = getEventsForDate(date);
+  const [y,m,d] = date.split('-');
+  const dObj = new Date(parseInt(y),parseInt(m)-1,parseInt(d));
+  const dow = ['일','월','화','수','목','금','토'][dObj.getDay()];
+  
+  h += '<div class="card" style="border:2px solid #6a1b9a;background:#faf5ff;margin-top:10px">';
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+  h += `<div style="font-size:14px;font-weight:700;color:#4a148c">📅 ${parseInt(m)}/${parseInt(d)} (${dow}) 일정</div>`;
+  h += `<button class="btn btn-sm btn-outline" onclick="EVENT_ADD_DATE=null;EVENT_EDIT=null;render()">닫기</button>`;
+  h += '</div>';
+  
+  // 기존 이벤트 목록
+  if(existing.length > 0){
+    h += '<div style="margin-bottom:10px">';
+    h += '<div style="font-size:11px;color:#86868b;margin-bottom:4px">등록된 일정</div>';
+    existing.forEach(ev=>{
+      const info = getEventTypeInfo(ev.type);
+      h += `<div style="background:${info.bg};border-left:3px solid ${info.color};padding:8px 10px;border-radius:6px;margin-bottom:4px">`;
+      h += `<div style="display:flex;justify-content:space-between;align-items:start;gap:6px">`;
+      h += `<div style="flex:1">`;
+      h += `<div style="font-size:13px;font-weight:700;color:${info.color}">${info.emoji} ${ev.title}</div>`;
+      const tags = [];
+      // 학년 뱃지
+      const gradeLabel = formatGrades(ev.grades);
+      tags.push(`<span style="background:#e8eaf6;color:#1a237e;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700">${gradeLabel}</span>`);
+      if(ev.affectsClasses) tags.push('<span style="background:#ffebee;color:#c62828;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700">수업 영향</span>');
+      if(ev.affectsNight) tags.push('<span style="background:#e3f2fd;color:#1565c0;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700">야자 영향</span>');
+      if(tags.length > 0) h += `<div style="margin-top:4px">${tags.join(' ')}</div>`;
+      if(ev.note) h += `<div style="font-size:11px;color:#424245;margin-top:4px">${ev.note}</div>`;
+      h += `<div style="font-size:9px;color:#86868b;margin-top:4px">${ev.createdBy||''}</div>`;
+      h += `</div>`;
+      if(canManageEvents()){
+        h += `<div style="display:flex;flex-direction:column;gap:3px">`;
+        h += `<button class="btn btn-sm btn-outline" style="font-size:10px;padding:2px 8px;color:#1565c0;border-color:#90caf9" onclick="startEventEdit('${date}','${ev.id}')">편집</button>`;
+        h += `<button class="btn btn-sm btn-outline" style="font-size:10px;padding:2px 8px;color:#c62828;border-color:#ef5350" onclick="deleteSchoolEvent('${date}','${ev.id}')">삭제</button>`;
+        h += `</div>`;
+      }
+      h += `</div>`;
+      h += `</div>`;
+    });
+    h += '</div>';
+  }
+  
+  // 추가/편집 폼 (권한 있을 때)
+  if(canManageEvents()){
+    const editingEv = EVENT_EDIT && EVENT_EDIT.date === date ? existing.find(e=>e.id===EVENT_EDIT.eventId) : null;
+    h += '<div style="background:#fff;padding:12px;border-radius:8px;border:1px solid #d1c4e9">';
+    h += `<div style="font-size:12px;font-weight:700;color:#4a148c;margin-bottom:8px">${editingEv?'✏️ 일정 편집':'➕ 일정 추가'}</div>`;
+    
+    // 타입 선택
+    h += '<div style="margin-bottom:8px">';
+    h += '<div style="font-size:11px;color:#86868b;margin-bottom:4px">타입</div>';
+    h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:4px">';
+    const selectedType = editingEv ? editingEv.type : 'memo';
+    Object.entries(EVENT_TYPES).forEach(([key, info])=>{
+      const active = selectedType === key;
+      h += `<button type="button" class="type-opt" data-type="${key}" onclick="selectEventType('${key}')" style="padding:6px 8px;border-radius:6px;border:2px solid ${active?info.color:'#e5e5ea'};background:${active?info.bg:'#fff'};color:${info.color};font-size:11px;font-weight:${active?'700':'500'};cursor:pointer;text-align:left">${info.emoji} ${info.label}</button>`;
+    });
+    h += '</div>';
+    h += `<input type="hidden" id="evInput_type" value="${selectedType}">`;
+    h += '</div>';
+    
+    // 제목
+    h += '<div style="margin-bottom:8px">';
+    h += '<div style="font-size:11px;color:#86868b;margin-bottom:4px">제목 (필수)</div>';
+    h += `<input type="text" id="evInput_title" value="${editingEv?editingEv.title.replace(/"/g,'&quot;'):''}" placeholder="예: 1학년 중간고사" class="auth-input" style="padding:8px 10px;font-size:13px;margin:0;width:100%">`;
+    h += '</div>';
+    
+    // 영향 학년 선택
+    h += '<div style="margin-bottom:8px;background:#f0f4ff;padding:8px;border-radius:6px">';
+    h += '<div style="font-size:11px;color:#86868b;margin-bottom:6px">🎓 영향 학년</div>';
+    const editGrades = editingEv && editingEv.grades ? editingEv.grades : [];
+    const isAllGrades = editGrades.length === 0;
+    h += '<div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">';
+    h += `<label style="display:flex;align-items:center;gap:3px;font-size:12px;font-weight:600;cursor:pointer;padding:4px 10px;background:${isAllGrades?'#1a237e':'#fff'};color:${isAllGrades?'#fff':'#424245'};border-radius:6px;border:1px solid #c5cae9"><input type="checkbox" id="evInput_allGrades" ${isAllGrades?'checked':''} style="margin:0">전체</label>`;
+    [1,2,3].forEach(g=>{
+      const checked = editGrades.includes(g);
+      h += `<label style="display:flex;align-items:center;gap:3px;font-size:12px;cursor:pointer;padding:4px 10px;background:${checked&&!isAllGrades?'#3f51b5':'#fff'};color:${checked&&!isAllGrades?'#fff':'#424245'};border-radius:6px;border:1px solid #c5cae9"><input type="checkbox" id="evInput_grade_${g}" class="grade-check" ${checked?'checked':''} ${isAllGrades?'disabled':''} style="margin:0">${g}학년</label>`;
+    });
+    h += '</div>';
+    h += '<div style="font-size:10px;color:#86868b;margin-top:4px">💡 "전체" 체크 시 모든 학년에 영향 · 특정 학년만 영향 주려면 "전체" 해제 후 선택</div>';
+    h += '</div>';
+    
+    // 영향 체크박스
+    h += '<div style="margin-bottom:8px;background:#f5f5f7;padding:8px;border-radius:6px">';
+    h += '<div style="font-size:11px;color:#86868b;margin-bottom:6px">🔗 연동 설정</div>';
+    const affCls = editingEv ? editingEv.affectsClasses : false;
+    const affNight = editingEv ? editingEv.affectsNight : false;
+    h += `<label style="display:block;font-size:12px;margin-bottom:4px;cursor:pointer">`;
+    h += `<input type="checkbox" id="evInput_affCls" ${affCls?'checked':''}> 📚 <b>수업 영향</b> (시간표에서 해당 날짜를 회색/취소 처리)`;
+    h += `</label>`;
+    h += `<label style="display:block;font-size:12px;cursor:pointer">`;
+    h += `<input type="checkbox" id="evInput_affNight" ${affNight?'checked':''}> 🌙 <b>야자 영향</b> (야자 감독/출석이 해당 날짜에 표시되지 않음)`;
+    h += `</label>`;
+    h += '</div>';
+    
+    // 메모
+    h += '<div style="margin-bottom:10px">';
+    h += '<div style="font-size:11px;color:#86868b;margin-bottom:4px">메모 (선택)</div>';
+    h += `<textarea id="evInput_note" placeholder="부가 설명" style="width:100%;min-height:50px;padding:8px;font-size:12px;border:1px solid #e5e5ea;border-radius:6px;resize:vertical;font-family:inherit">${editingEv?editingEv.note||'':''}</textarea>`;
+    h += '</div>';
+    
+    // 저장/취소 버튼
+    h += '<div style="display:flex;gap:6px">';
+    const idArg = editingEv ? `'${editingEv.id}'` : 'null';
+    h += `<button class="btn btn-sm" style="flex:1;background:#6a1b9a;color:#fff;font-weight:700" onclick="saveEventFromForm('${date}',${idArg})">💾 ${editingEv?'저장':'추가'}</button>`;
+    if(editingEv){
+      h += `<button class="btn btn-sm btn-outline" onclick="EVENT_EDIT=null;render()">편집 취소</button>`;
+    }
+    h += '</div>';
+    h += '</div>';
+  }
+  
+  h += '</div>';
+  return h;
+}
+
+function selectEventType(type){
+  const el = document.getElementById('evInput_type');
+  if(el) el.value = type;
+  // 기본 영향 자동 세팅
+  const info = getEventTypeInfo(type);
+  const ec = document.getElementById('evInput_affCls');
+  const en = document.getElementById('evInput_affNight');
+  if(ec) ec.checked = info.defAff.cls;
+  if(en) en.checked = info.defAff.night;
+  // UI 업데이트 (버튼 강조)
+  document.querySelectorAll('.type-opt').forEach(btn=>{
+    const k = btn.dataset.type;
+    const kInfo = getEventTypeInfo(k);
+    const active = k === type;
+    btn.style.border = `2px solid ${active?kInfo.color:'#e5e5ea'}`;
+    btn.style.background = active ? kInfo.bg : '#fff';
+    btn.style.fontWeight = active ? '700' : '500';
+  });
+}
+
+function toggleAllGradesCheckbox(){
+  const all = document.getElementById('evInput_allGrades');
+  if(!all) return;
+  const isAll = all.checked;
+  document.querySelectorAll('.grade-check').forEach(cb=>{
+    cb.disabled = isAll;
+    if(isAll) cb.checked = false;
+  });
+}
+
+// 페이지 렌더 후 학년 체크박스 변화 리스너 부착
+document.addEventListener('change', (e)=>{
+  if(e.target && e.target.id === 'evInput_allGrades'){
+    toggleAllGradesCheckbox();
+  }
+});
+
+function startEventEdit(date, eventId){
+  EVENT_EDIT = {date, eventId};
+  EVENT_ADD_DATE = date;
+  render();
+}
+
+async function saveEventFromForm(date, eventId){
+  const type = document.getElementById('evInput_type').value;
+  const title = document.getElementById('evInput_title').value.trim();
+  const note = document.getElementById('evInput_note').value.trim();
+  const affCls = document.getElementById('evInput_affCls').checked;
+  const affNight = document.getElementById('evInput_affNight').checked;
+  // 학년 수집
+  const isAll = document.getElementById('evInput_allGrades').checked;
+  const grades = [];
+  if(!isAll){
+    [1,2,3].forEach(g=>{
+      const cb = document.getElementById(`evInput_grade_${g}`);
+      if(cb && cb.checked) grades.push(g);
+    });
+    if(grades.length === 0){
+      alert("영향 학년을 선택하세요 (전체 또는 1/2/3학년 중 하나 이상)");
+      return;
+    }
+  }
+  if(!title){alert("제목을 입력하세요");return}
+  const data = {
+    type,
+    title,
+    note,
+    affectsClasses: affCls,
+    affectsNight: affNight,
+    grades  // 빈 배열 = 전체 학년
+  };
+  const id = await saveSchoolEvent(date, eventId, data);
+  if(id){
+    EVENT_EDIT = null;
+    // 추가 후에는 폼 초기화를 위해 EVENT_ADD_DATE를 유지하되 입력 값 초기화
+    if(!eventId){
+      setTimeout(()=>{
+        const t = document.getElementById('evInput_title');
+        const n = document.getElementById('evInput_note');
+        if(t) t.value = '';
+        if(n) n.value = '';
+      }, 100);
+    }
+  }
+}
+
+
+// ========== TAB: 야자 출석 (별도 탭) ==========
+function renderAttendanceTab(){
+  let h = '';
+  const today = todayStr();
+  const myName = CURRENT_USER ? CURRENT_USER.teacherName : null;
+  
+  // 기본 학년 설정
+  if(NIGHT_GRADE === null){
+    if(CURRENT_USER && CURRENT_USER.homeroom){
+      const hr = CURRENT_USER.homeroom;
+      if(hr.startsWith('head-')) NIGHT_GRADE = parseInt(hr.split('-')[1]);
+      else if(/^[123]-/.test(hr)) NIGHT_GRADE = parseInt(hr.split('-')[0]);
+    }
+    if(NIGHT_GRADE === null) NIGHT_GRADE = 2;
+  }
+  const grade = NIGHT_GRADE;
+  
+  // 기본 날짜: NIGHT_ATT_DATE 있으면 그것, 없으면 오늘
+  const attDate = (NIGHT_ATT_DATE && NIGHT_ATT_DATE.date) ? NIGHT_ATT_DATE.date : today;
+  if(!NIGHT_ATT_DATE || !NIGHT_ATT_DATE.date){
+    NIGHT_ATT_DATE = {date: today, grade};
+  }
+  
+  // 헤더
+  h += '<div class="class-badge" style="background:linear-gradient(135deg,#1565c0 0%,#0d47a1 100%)">';
+  h += '<h3>📋 야자 출석</h3>';
+  const [dy,dm,dd] = attDate.split('-');
+  const dObj = new Date(parseInt(dy),parseInt(dm)-1,parseInt(dd));
+  const dowChar = ['일','월','화','수','목','금','토'][dObj.getDay()];
+  h += `<div class="sub">${parseInt(dm)}월 ${parseInt(dd)}일 (${dowChar}) · ${grade}학년</div>`;
+  h += '</div>';
+  
+  // 학년 선택
+  h += '<div class="card" style="padding:10px 12px;margin-bottom:8px">';
+  h += '<div style="display:flex;gap:4px;margin-bottom:8px">';
+  [1,2,3].forEach(g=>{
+    const active = grade === g;
+    const userHr = CURRENT_USER && CURRENT_USER.homeroom;
+    let marker = '';
+    if(userHr){
+      if(userHr === `head-${g}`) marker = ' 👔';
+      else if(userHr.startsWith(`${g}-`)) marker = ' 🎯';
+    }
+    h += `<button onclick="NIGHT_GRADE=${g};NIGHT_ATT_DATE={date:'${attDate}',grade:${g}};renderPreservingScroll()" style="flex:1;padding:8px 6px;font-size:13px;font-weight:700;border-radius:8px;border:1px solid ${active?'#1565c0':'#e5e5ea'};background:${active?'#1565c0':'#fff'};color:${active?'#fff':'#424245'};cursor:pointer">${g}학년${marker}</button>`;
+  });
+  h += '</div>';
+  
+  // 날짜 선택
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px">';
+  h += `<input type="date" id="att_date_picker" value="${attDate}" style="padding:6px 10px;border:1px solid #90caf9;border-radius:6px;font-size:12px;flex:1;min-width:120px">`;
+  h += `<button class="btn btn-sm" style="background:#1565c0;color:#fff" onclick="openAttendanceFromPicker(${grade})">이동</button>`;
+  h += '</div>';
+  h += '<div style="display:flex;gap:4px;flex-wrap:wrap">';
+  h += `<button class="btn btn-sm btn-outline" style="flex:1;min-width:80px;font-size:11px" onclick="openAttendance('${today}',${grade})">📍 오늘</button>`;
+  h += `<button class="btn btn-sm btn-outline" style="font-size:11px" onclick="shiftAttendanceDate(${grade},-1)">◀ 이전날</button>`;
+  h += `<button class="btn btn-sm btn-outline" style="font-size:11px" onclick="shiftAttendanceDate(${grade},1)">다음날 ▶</button>`;
+  h += '</div>';
+  h += '</div>';
+  
+  // 출석부 본체 (감독 편집창에서와 동일한 렌더)
+  h += '<div id="attendance_card" class="card" style="border:2px solid #1565c0;background:#f8fbff">';
+  h += `<div id="attendance_body">${renderAttendanceSection(attDate, grade)}</div>`;
+  h += '</div>';
+  
+  return h;
+}
+
 
 function renderNightTab(){
   let h = '';
@@ -4613,6 +5419,19 @@ function renderNightTab(){
       h += `<div style="font-size:11px;font-weight:700;color:${isToday?'#1565c0':'#424245'};margin-bottom:4px">${dayInfo.dayNum}${isToday?' 📍':''}</div>`;
       
       if(dayInfo.inMonth){
+        // 학사일정 이벤트 표시 (이 학년에 영향 주는 야자 이벤트)
+        const nightEventsForDay = getNightAffectingEvents(dayInfo.date, grade);
+        const isBlocked = nightEventsForDay.length > 0;
+        if(isBlocked){
+          const ev0 = nightEventsForDay[0];
+          const eInfo = getEventTypeInfo(ev0.type);
+          h += `<div style="background:${eInfo.bg};color:${eInfo.color};padding:3px 5px;border-radius:4px;margin-bottom:3px;font-size:9px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid ${eInfo.color}" title="${ev0.title} (${formatGrades(ev0.grades)}) - 야자 없음">🚫 ${eInfo.emoji}${ev0.title}</div>`;
+        }
+        if(isBlocked){
+          h += `<div style="text-align:center;padding:12px 4px;font-size:11px;color:#86868b;background:#fafafa;border-radius:4px;margin:2px 0">야자 없음</div>`;
+          h += '</div>';
+          return;
+        }
         [0,1].forEach(slot=>{
           const info = getNightSupervisor(dayInfo.date, grade, slot);
           const isMine = myName && info.teacher === myName;
@@ -4635,39 +5454,6 @@ function renderNightTab(){
     h += '</div>';
   });
   h += '</div>';
-  
-  // 빠른 출석부 액세스: 오늘 버튼 + 날짜 피커
-  const attOpenDate = (NIGHT_ATT_DATE && NIGHT_ATT_DATE.date && NIGHT_ATT_DATE.grade === grade) ? NIGHT_ATT_DATE.date : today;
-  h += '<div class="card" style="padding:10px 12px;margin-bottom:10px;border:1px solid #90caf9;background:#f8fbff">';
-  h += '<div style="font-size:11px;font-weight:700;color:#1565c0;margin-bottom:6px">📋 출석부 날짜 선택</div>';
-  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px">';
-  h += `<input type="date" id="att_date_picker" value="${attOpenDate}" style="padding:6px 10px;border:1px solid #90caf9;border-radius:6px;font-size:12px;flex:1;min-width:120px">`;
-  h += `<button class="btn btn-sm" style="background:#1565c0;color:#fff" onclick="openAttendanceFromPicker(${grade})">열기</button>`;
-  h += '</div>';
-  h += '<div style="display:flex;gap:4px;flex-wrap:wrap">';
-  h += `<button class="btn btn-sm btn-outline" style="flex:1;min-width:80px;font-size:11px" onclick="openAttendance('${today}',${grade})">📍 오늘 (${parseInt(today.split('-')[1])}/${parseInt(today.split('-')[2])})</button>`;
-  // 이전/다음 날짜 (출석부가 열려있을 때만)
-  if(NIGHT_ATT_DATE && NIGHT_ATT_DATE.date && NIGHT_ATT_DATE.grade === grade){
-    h += `<button class="btn btn-sm btn-outline" style="font-size:11px" onclick="shiftAttendanceDate(${grade},-1)">◀ 이전날</button>`;
-    h += `<button class="btn btn-sm btn-outline" style="font-size:11px" onclick="shiftAttendanceDate(${grade},1)">다음날 ▶</button>`;
-  }
-  h += '</div>';
-  h += '</div>';
-  
-  // 독립 출석부 섹션 (감독 편집과 별개)
-  if(NIGHT_ATT_DATE && NIGHT_ATT_DATE.date && NIGHT_ATT_DATE.grade === grade){
-    const attDate = NIGHT_ATT_DATE.date;
-    const [ay,am,ad] = attDate.split('-');
-    const adObj = new Date(parseInt(ay),parseInt(am)-1,parseInt(ad));
-    const adow = ['일','월','화','수','목','금','토'][adObj.getDay()];
-    h += '<div id="attendance_card" class="card" style="border:2px solid #1565c0;background:#f8fbff">';
-    h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
-    h += `<div style="font-size:13px;font-weight:700;color:#1565c0">📋 ${parseInt(am)}/${parseInt(ad)} (${adow}) 출석부</div>`;
-    h += `<button class="btn btn-sm btn-outline" onclick="closeAttendance()">닫기</button>`;
-    h += '</div>';
-    h += `<div id="attendance_body">${renderAttendanceSection(attDate, grade)}</div>`;
-    h += '</div>';
-  }
   
   // 배정/편집 섹션
   if(NIGHT_SWAP_TARGET){
@@ -4732,7 +5518,7 @@ function renderNightTab(){
     }
     h += '</div>';
     // 감독 편집창에 "출석부" 버튼 추가
-    h += `<div style="margin-top:8px;text-align:center"><button class="btn btn-sm btn-outline" style="color:#1565c0;border-color:#90caf9" onclick="cancelNightSwap();openAttendance('${T_info.date}',${T_info.grade})">📋 이 날짜 출석부 열기</button></div>`;
+    h += `<div style="margin-top:8px;text-align:center"><button class="btn btn-sm btn-outline" style="color:#1565c0;border-color:#90caf9" onclick="cancelNightSwap();jumpToAttendance('${T_info.date}',${T_info.grade})">📋 이 날짜 출석 탭으로</button></div>`;
   }
   
   // 일괄 편집 모드: 맨 아래 저장 바 (sticky)
@@ -5007,7 +5793,13 @@ function render(){
   const app=document.getElementById('app');
   let h=renderTopbar();
   h+='<div class="content">';
-  if(TAB==="home")h+=renderHomeTab();
+  if(TAB==="home"){
+    try{ h+=renderHomeTab(); }
+    catch(e){ 
+      console.error("renderHomeTab error:", e);
+      h+=`<div class="card" style="background:#ffebee;border:2px solid #c62828"><div style="font-size:13px;font-weight:700;color:#c62828">⚠️ 홈 화면 로드 실패</div><div style="font-size:11px;color:#424245;margin-top:6px;font-family:monospace;background:#fff;padding:8px;border-radius:4px">${e.message}</div><div style="margin-top:10px;display:flex;gap:6px"><button class="btn btn-sm" onclick="setTab('swap')">🔄 수업 교체 탭으로</button><button class="btn btn-sm btn-outline" onclick="setTab('night')">🌙 감독 탭으로</button></div></div>`; 
+    }
+  }
   else if(TAB==="swap")h+=renderSwapTab();
   else if(TAB==="find")h+=renderFindTab();
   else if(TAB==="common")h+=renderCommonTab();
@@ -5017,6 +5809,8 @@ function render(){
   else if(TAB==="view")h+=renderViewTab();
   else if(TAB==="records")h+=renderRecordsTab();
   else if(TAB==="night")h+=renderNightTab();
+  else if(TAB==="attendance")h+=renderAttendanceTab();
+  else if(TAB==="events")h+=renderEventsTab();
   else if(TAB==="admin" && isAdmin())h+=renderAdminTab();
   else if(TAB==="admin" && !isAdmin())h+=`<div class="empty-state"><span class="emoji">🔒</span>관리자 권한이 필요합니다</div>`;
   h+='</div>';
