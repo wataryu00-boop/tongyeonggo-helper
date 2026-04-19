@@ -347,7 +347,7 @@ let MORE_OPEN=false;
 
 // Records state
 let RECORDS = {};  // {date: {id: record}}
-let VIEW_DATE = new Date().toISOString().slice(0,10); // YYYY-MM-DD
+let VIEW_DATE = todayStr(); // YYYY-MM-DD (로컬 타임)
 let FB_READY = false;
 
 // Auth state
@@ -402,22 +402,47 @@ let EVENT_ADD_DATE = null; // 추가 모달 열린 날짜
 let ADMIN_EDIT_UID = null;
 
 // Helpers for date
-function todayStr(){return new Date().toISOString().slice(0,10)}
-function formatDate(s){const d=new Date(s);const days=["일","월","화","수","목","금","토"];return `${s} (${days[d.getDay()]})`}
+// 로컬 시간 기반 YYYY-MM-DD (타임존 이슈 없음)
+function _ymdLocal(d){
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const dd = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${dd}`;
+}
+
+// VIEW_DATE 주 이동 헬퍼
+function shiftViewWeek(deltaWeeks){
+  const [y,m,d] = VIEW_DATE.split('-').map(Number);
+  const dt = new Date(y, m-1, d);
+  dt.setDate(dt.getDate() + deltaWeeks*7);
+  VIEW_DATE = _ymdLocal(dt);
+  SEL = null;
+  render();
+}
+function todayStr(){return _ymdLocal(new Date())}
+function formatDate(s){
+  // "2026-04-20" 파싱 시 로컬 타임 자정으로 해석 (UTC 함정 회피)
+  const [y,m,d] = s.split('-').map(Number);
+  const dt = new Date(y, m-1, d);
+  const days=["일","월","화","수","목","금","토"];
+  return `${s} (${days[dt.getDay()]})`;
+}
 
 // Get the Monday of the week containing the given date (YYYY-MM-DD)
 function getWeekStart(dateStr){
-  const d = new Date(dateStr);
+  const [y,m,dNum] = dateStr.split('-').map(Number);
+  const d = new Date(y, m-1, dNum); // 로컬 타임 자정
   const day = d.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-  const offset = day === 0 ? -6 : 1 - day; // Shift to Monday
+  const offset = day === 0 ? -6 : 1 - day; // 일요일(0)은 전주 월요일로
   d.setDate(d.getDate() + offset);
-  return d.toISOString().slice(0,10);
+  return _ymdLocal(d);
 }
 // Get the Sunday of the same week
 function getWeekEnd(dateStr){
-  const monday = new Date(getWeekStart(dateStr));
-  monday.setDate(monday.getDate() + 6);
-  return monday.toISOString().slice(0,10);
+  const [y,m,d] = getWeekStart(dateStr).split('-').map(Number);
+  const dt = new Date(y, m-1, d);
+  dt.setDate(dt.getDate() + 6);
+  return _ymdLocal(dt);
 }
 // Format week range as "MM/DD - MM/DD"
 function formatWeek(dateStr){
@@ -430,9 +455,10 @@ function formatWeek(dateStr){
 function dayCharToDate(weekStart, dayChar){
   const idx = DAYS.indexOf(dayChar); // 0=월, 4=금
   if(idx < 0) return null;
-  const d = new Date(weekStart);
+  const [y,m,dNum] = weekStart.split('-').map(Number);
+  const d = new Date(y, m-1, dNum);
   d.setDate(d.getDate() + idx);
-  return d.toISOString().slice(0,10);
+  return _ymdLocal(d);
 }
 // Get the date from a weekStart + day character (e.g., "4/24 (금)")
 function formatDayInWeek(weekStart, dayChar, period){
@@ -1480,8 +1506,8 @@ function renderSwapTab(){
   h+='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">';
   h+=`<input type="date" value="${VIEW_DATE}" onchange="VIEW_DATE=this.value;SEL=null;render()" style="flex:1;min-width:140px;padding:6px 8px;border-radius:6px;border:1px solid #e5e5ea;font-size:12px;font-family:inherit">`;
   h+=`<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="VIEW_DATE=todayStr();SEL=null;render()">이번주</button>`;
-  h+=`<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="const d=new Date(VIEW_DATE);d.setDate(d.getDate()-7);VIEW_DATE=d.toISOString().slice(0,10);SEL=null;render()">◀ 이전주</button>`;
-  h+=`<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="const d=new Date(VIEW_DATE);d.setDate(d.getDate()+7);VIEW_DATE=d.toISOString().slice(0,10);SEL=null;render()">다음주 ▶</button>`;
+  h+=`<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="shiftViewWeek(-1)">◀ 이전주</button>`;
+  h+=`<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="shiftViewWeek(1)">다음주 ▶</button>`;
   h+='</div></div>';
   
   if(ME===null){
@@ -1901,7 +1927,7 @@ function openCrossWeekSwap(myInfo){
 function changeCrossWeek(delta){
   const d = new Date(CROSS_SWAP_STATE.targetWeek);
   d.setDate(d.getDate() + delta*7);
-  CROSS_SWAP_STATE.targetWeek = d.toISOString().slice(0,10);
+  CROSS_SWAP_STATE.targetWeek = _ymdLocal(d);
   renderCrossWeekSheet();
 }
 function renderCrossWeekSheet(){
@@ -2119,8 +2145,8 @@ function renderMyClassTab(){
   h+='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">';
   h+=`<input type="date" value="${VIEW_DATE}" onchange="VIEW_DATE=this.value;render()" style="flex:1;min-width:140px;padding:6px 8px;border-radius:6px;border:1px solid #e5e5ea;font-size:12px;font-family:inherit">`;
   h+=`<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="VIEW_DATE=todayStr();render()">이번주</button>`;
-  h+=`<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="const d=new Date(VIEW_DATE);d.setDate(d.getDate()-7);VIEW_DATE=d.toISOString().slice(0,10);render()">◀</button>`;
-  h+=`<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="const d=new Date(VIEW_DATE);d.setDate(d.getDate()+7);VIEW_DATE=d.toISOString().slice(0,10);render()">▶</button>`;
+  h+=`<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="shiftViewWeek(-1)">◀</button>`;
+  h+=`<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="shiftViewWeek(1)">▶</button>`;
   h+='</div></div>';
   
   // Class selector chips
@@ -2383,8 +2409,8 @@ function renderViewTab(){
   h+='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">';
   h+=`<input type="date" value="${VIEW_DATE}" onchange="VIEW_DATE=this.value;render()" style="flex:1;min-width:140px;padding:6px 8px;border-radius:6px;border:1px solid #e5e5ea;font-size:12px;font-family:inherit">`;
   h+=`<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="VIEW_DATE=todayStr();render()">이번주</button>`;
-  h+=`<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="const d=new Date(VIEW_DATE);d.setDate(d.getDate()-7);VIEW_DATE=d.toISOString().slice(0,10);render()">◀</button>`;
-  h+=`<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="const d=new Date(VIEW_DATE);d.setDate(d.getDate()+7);VIEW_DATE=d.toISOString().slice(0,10);render()">▶</button>`;
+  h+=`<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="shiftViewWeek(-1)">◀</button>`;
+  h+=`<button class="qa-btn" style="padding:5px 10px;font-size:11px" onclick="shiftViewWeek(1)">▶</button>`;
   h+='</div></div>';
   
   h+='<div class="card"><div class="help-text">💡 선생님 선택 → 해당 주의 시간표 조회 (변경사항 자동 반영)</div>';
@@ -2437,8 +2463,8 @@ function renderRecordsTab(){
   h+=`<input type="date" value="${VIEW_DATE}" onchange="VIEW_DATE=this.value;render()" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid #e5e5ea;font-size:15px;font-family:inherit;background:#fff">`;
   h+='<div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">';
   h+=`<button class="qa-btn" onclick="VIEW_DATE=todayStr();render()">이번주</button>`;
-  h+=`<button class="qa-btn" onclick="const d=new Date(VIEW_DATE);d.setDate(d.getDate()-7);VIEW_DATE=d.toISOString().slice(0,10);render()">◀ 이전주</button>`;
-  h+=`<button class="qa-btn" onclick="const d=new Date(VIEW_DATE);d.setDate(d.getDate()+7);VIEW_DATE=d.toISOString().slice(0,10);render()">다음주 ▶</button>`;
+  h+=`<button class="qa-btn" onclick="shiftViewWeek(-1)">◀ 이전주</button>`;
+  h+=`<button class="qa-btn" onclick="shiftViewWeek(1)">다음주 ▶</button>`;
   h+='</div>';
   h+='</div>';
   
