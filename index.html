@@ -2223,51 +2223,124 @@ function renderClassScheduleWithOverrides(cls, weekStart){
   let changedCount = 0;
   const cellData = {};
   
+  const records = Object.values(RECORDS[weekStart] || {});
+  
+  // 1차: 기본 cellData 생성
   DAYS.forEach(d=>{PERIODS.forEach(p=>{
     const slot = d+p;
     const base = classData[slot];
-    
     if(!base){
-      // Empty slot - but might be a movable class period (for 2-10: 월2,월4,화2,수4,목5,금2,금4,금7)
-      // For other classes: check if this slot is being used for any class by room lookup
       cellData[slot] = {type:"empty", base:null};
-      return;
+    } else {
+      cellData[slot] = {type:"class", base, override:null};
     }
-    
-    // Check overrides:
-    // 1. Teacher is the "original" in a sub (대강) - their class is being taken by substitute
-    // 2. Teacher1 or teacher2 in swap affecting this slot
-    const records = Object.values(RECORDS[weekStart] || {});
-    let override = null;
-    for(const rec of records){
-      if(rec.type === "sub" && rec.teacher === base.t && rec.day === d && rec.period === parseInt(p)){
-        override = {type:"sub", by:rec.substitute, subj:rec.subj};
-        break;
-      }
-      if(rec.type === "swap"){
-        // The class at this slot belongs to teacher1 (week1/day1/period1)
-        if(rec.teacher1 === base.t && rec.week1 === weekStart && rec.day1 === d && rec.period1 === parseInt(p)){
-          override = {type:"swap-out", to:`${rec.week2} ${rec.day2}${rec.period2}`, subj:base.s};
-          break;
-        }
-        // Or teacher2 at week2/day2/period2
-        if(rec.teacher2 === base.t && rec.week2 === weekStart && rec.day2 === d && rec.period2 === parseInt(p)){
-          override = {type:"swap-out", to:`${rec.week1} ${rec.day1}${rec.period1}`, subj:base.s};
-          break;
-        }
-        // Incoming: teacher1's class came to week2/day2/period2 slot; but that slot belongs to teacher2's class in a different class
-        // This is the "교체해서 다른 선생님이 맡는 상황" - affects the teacher's schedule, but not this class's room (since room stays)
-        // For now, don't mark it
-      }
-    }
-    
-    if(override) changedCount++;
-    cellData[slot] = {type:"class", base, override};
   })});
+  
+  // 2차: 교체 기록 반영 - "들어옴(swap-in)"을 우선 처리하여 현재 상태를 표시
+  // 같은 반에서 teacher1이 slot1에 가르치고 teacher2가 slot2에 가르치면,
+  // 교체 후 slot1에는 teacher2의 수업이, slot2에는 teacher1의 수업이 들어온다
+  
+  const incomingChanges = []; // [{slot, newSubj, newTeacher, origBase}]
+  const outgoingChanges = []; // [{slot, toSlotDesc, subj}]
+  
+  for(const rec of records){
+    if(!rec) continue;
+    
+    // 대강 (sub): 이 반의 slot에 대강자 표시
+    if(rec.type === "sub"){
+      const slot = rec.day + rec.period;
+      const cell = cellData[slot];
+      if(cell && cell.type === "class" && cell.base && cell.base.t === rec.teacher){
+        cell.override = {type:"sub", by:rec.substitute, subj:rec.subj};
+        changedCount++;
+      }
+      continue;
+    }
+    
+    if(rec.type !== "swap") continue;
+    
+    const slot1 = rec.day1 + rec.period1;
+    const slot2 = rec.day2 + rec.period2;
+    
+    // teacher1이 이 반의 slot1 담당인지 확인 (수업-공강 교체든 수업-수업 교체든)
+    const t1InSlot1 = rec.week1 === weekStart 
+                    && cellData[slot1] 
+                    && cellData[slot1].type === "class" 
+                    && cellData[slot1].base 
+                    && cellData[slot1].base.t === rec.teacher1;
+    
+    // teacher2가 이 반의 slot2 담당인지 확인
+    const t2InSlot2 = rec.week2 === weekStart 
+                    && cellData[slot2] 
+                    && cellData[slot2].type === "class" 
+                    && cellData[slot2].base 
+                    && cellData[slot2].base.t === rec.teacher2;
+    
+    // teacher1 관점: slot1 수업이 slot2로 이동 (이 반에서 해당되면)
+    if(t1InSlot1){
+      // slot1: 이 반의 수업이 나감
+      outgoingChanges.push({
+        slot: slot1,
+        toSlotDesc: `${rec.week2} ${rec.day2}${rec.period2}`,
+        subj: cellData[slot1].base.s
+      });
+      // slot2: 이 반에 teacher1의 수업이 들어옴 (원래 slot2가 공강이었어도 OK)
+      if(rec.week2 === weekStart && cellData[slot2]){
+        incomingChanges.push({
+          slot: slot2,
+          newSubj: cellData[slot1].base.s,
+          newTeacher: rec.teacher1,
+          origBase: cellData[slot2].base // empty면 null
+        });
+      }
+    }
+    
+    // teacher2 관점: slot2 수업이 slot1으로 이동
+    if(t2InSlot2){
+      // slot2: 이 반의 수업이 나감
+      outgoingChanges.push({
+        slot: slot2,
+        toSlotDesc: `${rec.week1} ${rec.day1}${rec.period1}`,
+        subj: cellData[slot2].base.s
+      });
+      // slot1: 이 반에 teacher2의 수업이 들어옴
+      if(rec.week1 === weekStart && cellData[slot1]){
+        incomingChanges.push({
+          slot: slot1,
+          newSubj: cellData[slot2].base.s,
+          newTeacher: rec.teacher2,
+          origBase: cellData[slot1].base
+        });
+      }
+    }
+  }
+  
+  // 3차: "나감"을 먼저 적용
+  outgoingChanges.forEach(oc=>{
+    const cell = cellData[oc.slot];
+    if(!cell || cell.override) return; // sub 이미 있으면 스킵
+    cell.override = {type:"swap-out", to:oc.toSlotDesc, subj:oc.subj};
+    changedCount++;
+  });
+  
+  // 4차: "들어옴" 을 최종 덮어씀 (swap-out보다 우선)
+  incomingChanges.forEach(ic=>{
+    const cell = cellData[ic.slot];
+    if(!cell) return;
+    // 대강(sub)이 이미 있으면 유지
+    if(cell.override && cell.override.type === "sub") return;
+    cell.override = {
+      type: "swap-in",
+      subj: ic.newSubj,
+      teacher: ic.newTeacher,
+      origBase: ic.origBase
+    };
+    changedCount++;
+  });
   
   h+='<div class="card" style="margin-top:10px">';
   h+='<div class="help-text">';
-  h+='🟠 주황 테두리: 교체/대강 발생한 수업';
+  h+='🔵 파란 테두리: 교체로 들어온 수업 · 🟠 주황 테두리: 대강 수업';
   if(changedCount>0)h+=` · <b>변경 ${changedCount}건</b>`;
   h+='</div>';
   
@@ -2280,6 +2353,18 @@ function renderClassScheduleWithOverrides(cls, weekStart){
       const slot=d+pr;
       const data=cellData[slot];
       if(!data || data.type==="empty"){
+        // swap-in이 empty slot에 들어왔는지 체크
+        if(data && data.override && data.override.type === "swap-in"){
+          const ov = data.override;
+          const bg = gc(ov.subj);
+          h+=`<td style="background:${bg};box-shadow:inset 0 0 0 2.5px #1565c0">`;
+          h+='<div style="position:relative">';
+          h+='<span style="position:absolute;top:-1px;right:0;font-size:9px">🔄</span>';
+          h+=`<div class="sn" style="color:#1565c0;font-weight:700">${ov.subj}</div>`;
+          h+=`<div class="rm" style="color:#1565c0;font-weight:700">${ov.teacher}</div>`;
+          h+='</div></td>';
+          return;
+        }
         // For 2-10, show 이동 for known movable slots
         const movableSlots=["월2","월4","화2","수4","목5","금2","금4","금7"];
         if(showMovable && movableSlots.includes(slot)){
@@ -2293,7 +2378,14 @@ function renderClassScheduleWithOverrides(cls, weekStart){
       const override=data.override;
       const bg=gc(base.s);
       let style=`background:${bg}`;
-      if(override) style += ';box-shadow:inset 0 0 0 2.5px #e65100';
+      if(override){
+        const borderColor = override.type === "swap-in" ? "#1565c0" : "#e65100";
+        style += `;box-shadow:inset 0 0 0 2.5px ${borderColor}`;
+        // swap-in은 새 과목의 배경색으로 덮어쓰기
+        if(override.type === "swap-in" && override.subj){
+          style = style.replace(/background:[^;]+/, `background:${gc(override.subj)}`);
+        }
+      }
       if(CURRENT_USER && CURRENT_USER.teacherName && base.t === CURRENT_USER.teacherName) style += ';outline:2px solid #1a237e;outline-offset:-2px';
       
       h+=`<td style="${style}">`;
@@ -2307,6 +2399,13 @@ function renderClassScheduleWithOverrides(cls, weekStart){
           h+='<span style="position:absolute;top:-1px;right:0;font-size:9px">📤</span>';
           h+=`<div class="sn" style="color:#e65100;font-weight:700;text-decoration:line-through;opacity:.7">${base.s}</div>`;
           h+=`<div class="rm" style="color:#bf360c;font-size:7px">교체→</div>`;
+        }else if(override.type==="swap-in"){
+          h+='<span style="position:absolute;top:-1px;right:0;font-size:9px">🔄</span>';
+          h+=`<div class="sn" style="color:#1565c0;font-weight:700">${override.subj}</div>`;
+          h+=`<div class="rm" style="color:#1565c0;font-weight:700">${override.teacher}</div>`;
+          if(override.origBase){
+            h+=`<div style="font-size:7px;color:#9e9e9e;text-decoration:line-through;margin-top:1px">원래 ${override.origBase.s} ${override.origBase.t}</div>`;
+          }
         }
         h+='</div>';
       }else{
