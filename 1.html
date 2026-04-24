@@ -1,0 +1,1519 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<meta name="theme-color" content="#8b0000">
+<title>협의회 대응 자료</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&family=Noto+Serif+KR:wght@400;600;700;900&family=Noto+Sans+KR:wght@400;500;600;700;800;900&display=swap');
+
+  :root {
+    --ink: #1a1a1a;
+    --paper: #faf7f2;
+    --accent: #8b0000;
+    --accent-soft: #c94a4a;
+    --blue: #1e3a5f;
+    --gold: #b08d4f;
+    --gray: #5a5a5a;
+    --light-gray: #e8e4db;
+    --success: #2d6a3e;
+    --warn-bg: #fff5f5;
+    --def-bg: #f0f5fa;
+    --safe-area-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    font-family: 'Noto Sans KR', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    line-height: 1.6;
+    font-size: 15px;
+    padding-bottom: calc(70px + var(--safe-area-bottom));
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ========= 상단 헤더 ========= */
+  .header {
+    background: var(--ink);
+    color: #fff;
+    padding: 14px 18px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+    border-bottom: 2px solid var(--accent);
+  }
+
+  .header h1 {
+    font-family: 'Noto Serif KR', serif;
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: -0.3px;
+  }
+
+  .header .sub {
+    font-size: 10px;
+    color: var(--gold);
+    letter-spacing: 2px;
+    margin-top: 3px;
+    font-weight: 500;
+  }
+
+  /* ========= 탭 네비게이션 (상단 고정) ========= */
+  .tabs {
+    background: #fff;
+    display: flex;
+    position: sticky;
+    top: 62px;
+    z-index: 99;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    border-bottom: 1px solid var(--light-gray);
+  }
+
+  .tab-btn {
+    flex: 1;
+    background: transparent;
+    border: none;
+    padding: 14px 8px;
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--gray);
+    cursor: pointer;
+    position: relative;
+    transition: color 0.2s;
+    min-height: 48px;
+  }
+
+  .tab-btn.active {
+    color: var(--accent);
+  }
+
+  .tab-btn.active::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 20%;
+    right: 20%;
+    height: 3px;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+
+  /* ========= 콘텐츠 영역 ========= */
+  .content {
+    padding: 16px 14px 40px;
+    max-width: 720px;
+    margin: 0 auto;
+  }
+
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* ========= 섹션 타이틀 ========= */
+  h2.section-title {
+    font-family: 'Noto Serif KR', serif;
+    font-size: 22px;
+    font-weight: 800;
+    margin: 24px 0 12px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--ink);
+    letter-spacing: -0.5px;
+  }
+
+  h2.section-title .eyebrow {
+    display: block;
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 3px;
+    margin-bottom: 4px;
+  }
+
+  h3 {
+    font-family: 'Noto Serif KR', serif;
+    font-size: 17px;
+    font-weight: 700;
+    margin: 24px 0 10px;
+    padding-left: 12px;
+    border-left: 4px solid var(--accent);
+    line-height: 1.4;
+  }
+
+  h4 {
+    font-size: 14px;
+    font-weight: 700;
+    margin: 18px 0 8px;
+    color: var(--blue);
+  }
+
+  p { margin-bottom: 10px; font-size: 14.5px; }
+
+  /* ========= 오프닝 멘트 ========= */
+  .opening-card {
+    background: #fffbea;
+    border: 2px solid var(--gold);
+    border-radius: 10px;
+    padding: 18px 20px 20px;
+    margin: 16px 0 24px;
+    position: relative;
+  }
+
+  .opening-card::before {
+    content: "📢 OPENING";
+    position: absolute;
+    top: -10px;
+    left: 16px;
+    background: var(--accent);
+    color: #fff;
+    padding: 3px 12px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+  }
+
+  .opening-card .text {
+    font-family: 'Noto Serif KR', serif;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.65;
+    padding-top: 6px;
+  }
+
+  .highlight {
+    background: linear-gradient(transparent 55%, #ffe066 55%);
+    padding: 0 2px;
+    font-weight: 700;
+  }
+
+  /* ========= 쟁점 카드 (요약 탭) ========= */
+  .issue-card {
+    background: #fff;
+    border: 1.5px solid var(--ink);
+    border-radius: 10px;
+    margin-bottom: 18px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+
+  .issue-header {
+    color: #fff;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .issue-header.a { background: var(--accent); }
+  .issue-header.b { background: var(--blue); }
+  .issue-header.c { background: var(--gold); }
+
+  .issue-header .code {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    opacity: 0.85;
+    margin-bottom: 3px;
+  }
+
+  .issue-header .title {
+    font-family: 'Noto Serif KR', serif;
+    font-size: 16px;
+    font-weight: 800;
+    line-height: 1.3;
+  }
+
+  .issue-body { padding: 14px 16px; }
+
+  .issue-body ul.item-list li {
+    padding: 8px 0 8px 22px;
+    position: relative;
+    font-size: 13.5px;
+    line-height: 1.5;
+    border-bottom: 1px dashed var(--light-gray);
+    list-style: none;
+  }
+
+  .issue-body ul.item-list li:last-child { border-bottom: none; }
+
+  .issue-body ul.item-list li::before {
+    content: "▸";
+    position: absolute;
+    left: 4px;
+    top: 8px;
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  .badge {
+    display: inline-block;
+    background: var(--ink);
+    color: #fff;
+    padding: 1px 7px;
+    border-radius: 3px;
+    font-size: 10.5px;
+    font-weight: 600;
+    margin-right: 5px;
+    vertical-align: 1px;
+  }
+
+  /* ========= 한방 박스 ========= */
+  .punch {
+    background: var(--warn-bg);
+    border-left: 4px solid var(--accent);
+    padding: 12px 14px;
+    margin-top: 12px;
+    border-radius: 0 6px 6px 0;
+    font-size: 13.5px;
+  }
+
+  .punch .label {
+    display: inline-block;
+    background: var(--accent);
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+
+  .alt {
+    background: #f0f5fa;
+    border-left: 4px solid var(--blue);
+    padding: 10px 14px;
+    margin-top: 10px;
+    border-radius: 0 6px 6px 0;
+    font-size: 13px;
+  }
+
+  .alt strong { color: var(--blue); }
+
+  /* ========= 5대 멘트 카드 ========= */
+  .mantra-card {
+    background: linear-gradient(135deg, var(--blue), #2c4975);
+    color: #fff;
+    border-radius: 10px;
+    padding: 20px 18px;
+    margin: 20px 0;
+  }
+
+  .mantra-card .header-text {
+    font-size: 11px;
+    letter-spacing: 2.5px;
+    color: var(--gold);
+    font-weight: 600;
+    margin-bottom: 14px;
+  }
+
+  .mantra-card ol {
+    list-style: none;
+    counter-reset: mantra;
+  }
+
+  .mantra-card ol li {
+    counter-increment: mantra;
+    padding: 12px 0 12px 36px;
+    position: relative;
+    border-bottom: 1px solid rgba(255,255,255,0.15);
+    font-family: 'Noto Serif KR', serif;
+    font-weight: 600;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  .mantra-card ol li:last-child { border-bottom: none; }
+
+  .mantra-card ol li::before {
+    content: counter(mantra);
+    position: absolute;
+    left: 0;
+    top: 12px;
+    background: var(--gold);
+    color: var(--ink);
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 24px;
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  /* ========= 수치 / 역공 표 ========= */
+  .data-box {
+    background: #fff;
+    border: 1.5px solid var(--ink);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin: 16px 0;
+  }
+
+  .data-box h4 {
+    margin-top: 0;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--ink);
+    color: var(--ink);
+  }
+
+  .data-row {
+    display: flex;
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--light-gray);
+    gap: 12px;
+    font-size: 13px;
+  }
+
+  .data-row:last-child { border-bottom: none; }
+
+  .data-row .k {
+    flex: 0 0 40%;
+    font-weight: 600;
+    color: var(--gray);
+  }
+
+  .data-row .v {
+    flex: 1;
+  }
+
+  .num {
+    color: var(--accent);
+    font-weight: 800;
+  }
+
+  /* ========= 반드시 지킬 3가지 ========= */
+  .priority-box {
+    background: var(--ink);
+    color: #fff;
+    border-radius: 10px;
+    padding: 18px 18px 20px;
+    margin: 20px 0;
+  }
+
+  .priority-box .ttl {
+    color: #ffe066;
+    font-size: 11px;
+    letter-spacing: 2.5px;
+    font-weight: 700;
+    margin-bottom: 12px;
+  }
+
+  .priority-box ol {
+    list-style: none;
+    counter-reset: p;
+  }
+
+  .priority-box ol li {
+    counter-increment: p;
+    padding: 10px 0 10px 40px;
+    position: relative;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    font-size: 14px;
+  }
+
+  .priority-box ol li:last-child { border-bottom: none; }
+
+  .priority-box ol li::before {
+    content: counter(p);
+    position: absolute;
+    left: 0;
+    top: 10px;
+    background: var(--accent);
+    color: #fff;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    text-align: center;
+    line-height: 28px;
+    font-weight: 800;
+    font-size: 14px;
+  }
+
+  .priority-box ol li strong {
+    display: block;
+    color: #ffe066;
+    margin-bottom: 3px;
+  }
+
+  .priority-box ol li small {
+    display: block;
+    opacity: 0.75;
+    font-size: 12px;
+    margin-top: 2px;
+  }
+
+  /* ========= 수세 전환 멘트 ========= */
+  .tactics {
+    background: #f5f1e8;
+    border-radius: 10px;
+    padding: 16px;
+    margin: 16px 0;
+    border: 1px solid var(--light-gray);
+  }
+
+  .tactics h4 { margin-top: 0; }
+
+  .tactics ul li {
+    padding: 6px 0 6px 22px;
+    position: relative;
+    font-size: 13.5px;
+    list-style: none;
+    line-height: 1.5;
+  }
+
+  .tactics ul li::before {
+    content: "💬";
+    position: absolute;
+    left: 0;
+    font-size: 12px;
+  }
+
+  .tactics ul.forbid li::before { content: "⛔"; }
+
+  /* ========= 디테일 탭용 ========= */
+  .expandable {
+    background: #fff;
+    border: 1px solid var(--light-gray);
+    border-radius: 8px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+
+  .expandable summary {
+    padding: 14px 16px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    list-style: none;
+    background: #fafaf7;
+    min-height: 48px;
+  }
+
+  .expandable summary::-webkit-details-marker { display: none; }
+
+  .expandable summary::after {
+    content: "＋";
+    font-size: 20px;
+    font-weight: 400;
+    color: var(--accent);
+    transition: transform 0.2s;
+  }
+
+  .expandable[open] summary::after {
+    content: "−";
+  }
+
+  .expandable[open] summary {
+    border-bottom: 1px solid var(--light-gray);
+    background: var(--ink);
+    color: #fff;
+  }
+
+  .expandable[open] summary::after {
+    color: var(--gold);
+  }
+
+  .expandable .exp-body {
+    padding: 14px 16px;
+  }
+
+  /* ========= 공격/방어 블록 ========= */
+  .exchange {
+    margin: 12px 0;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .exchange .atk,
+  .exchange .def {
+    padding: 12px 14px;
+    font-size: 13.5px;
+  }
+
+  .exchange .atk {
+    background: var(--warn-bg);
+    border-left: 4px solid var(--accent);
+  }
+
+  .exchange .atk::before {
+    content: "⚔ 예상 공격";
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 1.5px;
+    margin-bottom: 5px;
+  }
+
+  .exchange .def {
+    background: var(--def-bg);
+    border-left: 4px solid var(--blue);
+    margin-top: 4px;
+  }
+
+  .exchange .def::before {
+    content: "🛡 방어 논리";
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--blue);
+    letter-spacing: 1.5px;
+    margin-bottom: 5px;
+  }
+
+  .exchange blockquote {
+    font-style: italic;
+    font-size: 13.5px;
+    color: var(--ink);
+    padding: 2px 0;
+  }
+
+  /* ========= 표 ========= */
+  .mini-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+    margin: 10px 0;
+  }
+
+  .mini-table thead {
+    background: var(--ink);
+    color: #fff;
+  }
+
+  .mini-table th {
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 10.5px;
+    letter-spacing: 1px;
+    font-weight: 500;
+  }
+
+  .mini-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--light-gray);
+    vertical-align: top;
+    line-height: 1.45;
+  }
+
+  .mini-table tbody tr:nth-child(even) { background: #faf8f3; }
+
+  .mini-table td:first-child {
+    color: var(--accent);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  /* ========= 역공 매칭 ========= */
+  .counter-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 10px 0;
+    border-bottom: 1px dashed var(--light-gray);
+    font-size: 12.5px;
+  }
+
+  .counter-row:last-child { border-bottom: none; }
+
+  .counter-row .q {
+    color: var(--gray);
+    font-weight: 500;
+  }
+
+  .counter-row .a {
+    color: var(--accent);
+    font-weight: 600;
+    position: relative;
+    padding-left: 14px;
+  }
+
+  .counter-row .a::before {
+    content: "→";
+    position: absolute;
+    left: 0;
+    color: var(--accent);
+  }
+
+  /* ========= 체크리스트 ========= */
+  .checklist {
+    background: #fffbea;
+    border: 2px dashed var(--gold);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin: 16px 0;
+  }
+
+  .checklist h4 {
+    margin-top: 0;
+    color: var(--accent);
+  }
+
+  .checklist ul li {
+    padding: 8px 0 8px 28px;
+    position: relative;
+    font-size: 13.5px;
+    list-style: none;
+    line-height: 1.5;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .checklist ul li::before {
+    content: "☐";
+    position: absolute;
+    left: 0;
+    top: 7px;
+    font-size: 18px;
+    color: var(--accent);
+    line-height: 1;
+  }
+
+  .checklist ul li.checked::before {
+    content: "☑";
+    color: var(--success);
+  }
+
+  .checklist ul li.checked {
+    text-decoration: line-through;
+    color: var(--gray);
+  }
+
+  /* ========= 하단 플로팅 네비 ========= */
+  .bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border-top: 1px solid var(--light-gray);
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.06);
+    display: flex;
+    padding: 8px 0 calc(8px + var(--safe-area-bottom));
+    z-index: 98;
+  }
+
+  .nav-btn {
+    flex: 1;
+    background: none;
+    border: none;
+    padding: 8px 6px;
+    cursor: pointer;
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: 11px;
+    color: var(--gray);
+    font-weight: 500;
+    min-height: 48px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+  }
+
+  .nav-btn .icon {
+    font-size: 20px;
+    line-height: 1;
+  }
+
+  .nav-btn.active {
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  /* 스크롤 최상단 버튼 */
+  .top-btn {
+    position: fixed;
+    right: 16px;
+    bottom: calc(85px + var(--safe-area-bottom));
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--ink);
+    color: #fff;
+    border: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    font-size: 18px;
+    cursor: pointer;
+    z-index: 97;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+
+  .top-btn.show {
+    opacity: 0.85;
+    pointer-events: auto;
+  }
+
+  /* ========= 경고 박스 ========= */
+  .warn-box {
+    background: #fff4e6;
+    border-left: 4px solid #d97706;
+    padding: 12px 14px;
+    border-radius: 0 6px 6px 0;
+    margin: 12px 0;
+    font-size: 13px;
+  }
+
+  .warn-box strong {
+    color: #9a5a00;
+  }
+
+  /* ========= 링크 ========= */
+  a.anchor-link {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 600;
+    padding: 2px 6px;
+    background: #fff5f5;
+    border-radius: 4px;
+    font-size: 12.5px;
+    border: 1px solid #ffdddd;
+  }
+
+  /* ========= 반응형 (태블릿/데스크톱) ========= */
+  @media (min-width: 768px) {
+    .content { padding: 24px; }
+    h2.section-title { font-size: 26px; }
+    body { font-size: 16px; }
+  }
+
+  /* 인쇄용 */
+  @media print {
+    .header, .tabs, .bottom-nav, .top-btn { display: none !important; }
+    body { background: #fff; padding: 0; }
+    .view { display: block !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 상단 헤더 -->
+<header class="header">
+  <h1>협의회 대응 자료</h1>
+  <div class="sub">2027 중등 인사관리기준 개정 · 내부용</div>
+</header>
+
+<!-- 탭 -->
+<nav class="tabs">
+  <button class="tab-btn active" data-view="quick">⚡ 요약</button>
+  <button class="tab-btn" data-view="attack">🎯 공격</button>
+  <button class="tab-btn" data-view="defense">🛡 방어</button>
+  <button class="tab-btn" data-view="check">✅ 체크</button>
+</nav>
+
+<div class="content">
+
+<!-- ============================================= -->
+<!-- 탭 1: 요약 (A4 카드 내용) -->
+<!-- ============================================= -->
+<div class="view active" id="view-quick">
+
+  <div class="opening-card">
+    <div class="text">
+      이번 개정안에는 우려되는 세 흐름이 있습니다. <span class="highlight">첫째, 교사 간 서열화를 강화하는 근평 반영과 학폭 가산점 확대.</span> <span class="highlight">둘째, 학교장 권한을 비대화하는 유예 7년 확대.</span> <span class="highlight">셋째, 도시 쏠림을 심화시키는 가산점 상한 상향.</span> 모두 학교 현장의 협력과 공정성을 훼손합니다. 저는 <strong>반대가 아닌 대안 제시</strong>의 관점에서 말씀드립니다.
+    </div>
+  </div>
+
+  <h2 class="section-title"><span class="eyebrow">3대 쟁점</span>한눈에 보기</h2>
+
+  <!-- 쟁점 A -->
+  <div class="issue-card">
+    <div class="issue-header a">
+      <div>
+        <div class="code">ISSUE A</div>
+        <div class="title">교사 간 경쟁·서열화 강화</div>
+      </div>
+    </div>
+    <div class="issue-body">
+      <ul class="item-list">
+        <li><span class="badge">일23·39</span> 근평을 전보에 반영 / 2년 누가 → <strong>관리자 눈치보기</strong> 구조화</li>
+        <li><span class="badge">일31~34·가4·5</span> 학폭 부장·책임교사 대규모 가산점 신설 → <strong>학폭의 승진 도구화</strong></li>
+        <li><span class="badge">가1</span> 인성부장 2년 필수화 → 승진 미끼 → 인성교육 <strong>질 저하</strong></li>
+      </ul>
+      <div class="punch">
+        <div class="label">한 방</div>
+        승진가산점의 본질은 <strong>"열심히 일하면 교실을 떠날 기회를 주겠다"</strong>는 반교육적 메시지. 학폭 가산점은 <span class="num">교육감협의회도 폐지 권고</span>한 실패 제도. 40%만 받는 <strong>경쟁형</strong>은 학교공동체 협력을 파괴합니다.
+      </div>
+      <div class="alt">
+        <strong>대안:</strong> 수업시수 감축 / 전담 행정인력 / 학폭법 개정 / 교육감 표창
+      </div>
+    </div>
+  </div>
+
+  <!-- 쟁점 B -->
+  <div class="issue-card">
+    <div class="issue-header b">
+      <div>
+        <div class="code">ISSUE B</div>
+        <div class="title">학교장 권한 확대</div>
+      </div>
+    </div>
+    <div class="issue-body">
+      <ul class="item-list">
+        <li><span class="badge">일44</span> 학교장 유예 3→<strong>7년</strong> = 유예 아닌 <strong>준(準)고정 배치</strong></li>
+        <li><span class="badge">일43</span> 퇴직예정자 유예 1→2년</li>
+        <li><span class="badge">일4</span> 겸무 "반드시 지원" 강제화 → 교사 자기결정권 박탈</li>
+      </ul>
+      <div class="punch">
+        <div class="label">한 방</div>
+        유예 7년은 <strong>유예가 아니라 고정 배치</strong>입니다. 학교장이 "자기가 쓰기 편한 교사"를 7년 붙잡을 수 있게 됩니다.
+      </div>
+      <div class="alt">
+        <strong>대안:</strong> 초빙·전보특례 활용 / 학운위 심의 의무화 / 교육청으로 승인권 일원화
+      </div>
+    </div>
+  </div>
+
+  <!-- 쟁점 C -->
+  <div class="issue-card">
+    <div class="issue-header c">
+      <div>
+        <div class="code">ISSUE C</div>
+        <div class="title">도시 쏠림 심화</div>
+      </div>
+    </div>
+    <div class="issue-body">
+      <ul class="item-list">
+        <li><span class="badge">가2·3</span> 도심·도서벽지 상한 <strong>1.8→2.0</strong> = 도시에서 상한 도달 → <strong>도시 쏠림 가속</strong></li>
+        <li><span class="badge">일28</span> 자공고 2.0 전보가산점 신설 → 경쟁·서열화 학교 정책 우대</li>
+      </ul>
+      <div class="punch">
+        <div class="label">한 방</div>
+        도시 가산점을 <strong>올린다고 도서벽지에 경력교사가 가지 않습니다.</strong> 도시에서 상한 채우고 끝입니다.
+      </div>
+      <div class="alt">
+        <strong>대안:</strong> 도서벽지 수당 현실화 / 근무연한 우대 / 도서벽지 가산점 상향(도시가 아님)
+      </div>
+    </div>
+  </div>
+
+  <!-- 5대 핵심 멘트 -->
+  <div class="mantra-card">
+    <div class="header-text">💎 5대 핵심 멘트 · 암기</div>
+    <ol>
+      <li>승진가산점은 교육을 떠나는 보상입니다.</li>
+      <li>학폭 가산점은 교육감협의회도 폐지를 권고한 실패 제도입니다.</li>
+      <li>도시 가산점을 올려서 도서벽지가 살아난 적은 없습니다.</li>
+      <li>유예 7년은 유예가 아니라 고정 배치입니다.</li>
+      <li>근평 반영은 관리자 권력을 인사 권력으로 만드는 것입니다.</li>
+    </ol>
+  </div>
+
+  <!-- 수치 -->
+  <div class="data-box">
+    <h4>📊 핵심 수치 (기억 필수)</h4>
+    <div class="data-row">
+      <div class="k">공립 경남 중등</div>
+      <div class="v">305교 중 9학급&lt; <span class="num">100교</span>, 6학급&lt; <span class="num">56교</span></div>
+    </div>
+    <div class="data-row">
+      <div class="k">성과급 균등분배</div>
+      <div class="v">4,141교 <span class="num">88,938명</span> 참여('22)</div>
+    </div>
+    <div class="data-row">
+      <div class="k">학폭 가산점 구조</div>
+      <div class="v">교사 <strong>40% 이내</strong>만 → 경쟁형</div>
+    </div>
+    <div class="data-row">
+      <div class="k">가산점 형평성 역전</div>
+      <div class="v">담임 <span class="num">0.2</span> / 부장 <span class="num">0.4</span> / 연구 <span class="num">0.5</span></div>
+    </div>
+  </div>
+
+  <!-- 역공 매칭 -->
+  <div class="data-box">
+    <h4>🎯 역공 매칭 (공격받을 때 되받기)</h4>
+    <div class="counter-row">
+      <div class="q">"연구가산점 하향 반대?"</div>
+      <div class="a">자공고 가산점 신설(일28)은?</div>
+    </div>
+    <div class="counter-row">
+      <div class="q">"신규 도서벽지 제한 비현실?"</div>
+      <div class="a">도시 가산점 올리면 해결되나?</div>
+    </div>
+    <div class="counter-row">
+      <div class="q">"초빙 4→3년 반대?"</div>
+      <div class="a">유예 7년은 학교장 권한 과잉</div>
+    </div>
+    <div class="counter-row">
+      <div class="q">"피해자 비정기전보 정치적?"</div>
+      <div class="a">민주시민교육과도 일52 요구</div>
+    </div>
+  </div>
+
+  <!-- 반드시 지킬 3가지 -->
+  <div class="priority-box">
+    <div class="ttl">🛡 반드시 지켜낼 3가지</div>
+    <ol>
+      <li>
+        <strong>근평 전보 반영 저지</strong>
+        (일23·39)
+        <small>관리자 권력화 차단</small>
+      </li>
+      <li>
+        <strong>학폭 가산점 확대 저지</strong>
+        (일31~34·가1·4·5)
+        <small>교사 서열화 차단</small>
+      </li>
+      <li>
+        <strong>유예 7년 확대 저지</strong>
+        (일44)
+        <small>학교장 권한 비대화 차단</small>
+      </li>
+    </ol>
+  </div>
+
+  <!-- 수세 전환 & 금지 -->
+  <div class="tactics">
+    <h4>💬 수세 전환 멘트</h4>
+    <ul>
+      <li>"문제 진단은 같습니다. 해법만 다를 뿐입니다."</li>
+      <li>"경남 교육의 관점에서…" (← "전교조 입장" 금지)</li>
+      <li>"조문 수정으로 보완 가능합니다. 본질을 놓치지 맙시다."</li>
+      <li>"서면 의견 추가 제출" / "숙의 시간 요청"</li>
+    </ul>
+  </div>
+
+  <div class="tactics">
+    <h4>⛔ 절대 금지</h4>
+    <ul class="forbid">
+      <li>전교조 제안 모두를 완벽 방어하려는 자세</li>
+      <li>제안 학교 이름 공격 → <strong>"해당 조항"</strong>으로</li>
+      <li>"전교조 입장상…" 표현</li>
+      <li>학폭·기피업무 담당자 노고 폄하 (먼저 인정 후 진입)</li>
+      <li>일20(하급지 전보)은 유연성 보이기 ⚠️</li>
+    </ul>
+  </div>
+
+</div>
+
+<!-- ============================================= -->
+<!-- 탭 2: 공격 (3대 쟁점 상세) -->
+<!-- ============================================= -->
+<div class="view" id="view-attack">
+
+  <h2 class="section-title"><span class="eyebrow">CHAPTER · ATTACK</span>3대 쟁점 상세 논리</h2>
+
+  <!-- 쟁점 A -->
+  <h3>🔴 쟁점 A. 경쟁·서열화 강화</h3>
+
+  <details class="expandable">
+    <summary>해당 항목 9건 보기</summary>
+    <div class="exp-body">
+      <table class="mini-table">
+        <thead><tr><th>번호</th><th>제안기관</th><th>내용</th></tr></thead>
+        <tbody>
+          <tr><td>일반23</td><td>창원사파고</td><td>전보 서열명부에 <strong>근무성적</strong> 추가</td></tr>
+          <tr><td>일반39</td><td>창원사파고</td><td>근평 1년 → <strong>2년 누가</strong></td></tr>
+          <tr><td>가산점1</td><td>거제장평중</td><td>승진 시 <strong>인성부장 2년 필수화</strong></td></tr>
+          <tr><td>일반31</td><td>경남교육청 외</td><td>학폭 부장 0.7점 / 책임교사 0.3점</td></tr>
+          <tr><td>일반32</td><td>창원교육지원청</td><td>학폭 부장 <strong>최대 1.0점</strong> / 책임교사 0.5점</td></tr>
+          <tr><td>일반33</td><td>계룡중</td><td>학폭 부장·책임교사 각 0.5점</td></tr>
+          <tr><td>일반34</td><td>문산중</td><td>학교 규모별 차등</td></tr>
+          <tr><td>가산점4</td><td>진주여중 외</td><td>승진: 부장 0.7 / 책임 0.3</td></tr>
+          <tr><td>가산점5</td><td>진서중·고</td><td>승진: 각 0.5점</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
+
+  <details class="expandable">
+    <summary>핵심 공격 논리 4층</summary>
+    <div class="exp-body">
+      <h4>① 본질론 — 승진가산점의 반교육성</h4>
+      <p>승진가산점의 본질은 <strong>"열심히 일하면 교실을 떠날 기회를 주겠다"</strong>는 메시지다. 교감은 수업 없는 행정직. 승진을 보상으로 삼는 제도는 <strong>교육행위를 벌처럼 여기게 만드는</strong> 구조적 모순이다.</p>
+
+      <h4>② 학폭 가산점 — 실패 입증 제도</h4>
+      <ul class="item-list" style="padding-left:0;">
+        <li>2013년 도입 후 10년간 실패 평가 누적</li>
+        <li>학교당 40% 이내 부여 → 공동체 협력 훼손</li>
+        <li>북유럽 성공 프로그램은 모두 <strong>전체 참여형</strong></li>
+        <li>정작 학폭 책임교사는 신청 거부, 무관한 교무부장이 수령하는 역설</li>
+        <li>기간제 교사 배제 → 구조적 부조리</li>
+        <li>전국시도교육감협의회 이미 <strong>폐지 권고</strong></li>
+      </ul>
+
+      <h4>③ 근평 전보 반영 — 관리자 통치 수단화</h4>
+      <ul class="item-list" style="padding-left:0;">
+        <li>근평은 <strong>교장·교감의 주관적 평가</strong>가 결정적</li>
+        <li>전보 반영 시 "관리자 눈치보기" 구조화</li>
+        <li>교사의 교육적 소신과 자율성 훼손</li>
+        <li>2년 누가제는 평정 영향력 2배 확대 개악</li>
+      </ul>
+
+      <h4>④ 인성부장 필수화 — 학폭 업무의 승진 관문화</h4>
+      <ul class="item-list" style="padding-left:0;">
+        <li>승진 필수요건화 시 "승진 욕구 있는 교사 = 인성부장" 왜곡</li>
+        <li>인성교육 진심 교사 아닌 <strong>승진 필요한 교사</strong>가 자리 차지</li>
+        <li>학폭 해결의 질 저하 위험</li>
+      </ul>
+    </div>
+  </details>
+
+  <details class="expandable">
+    <summary>예상 반박 3건 + 재반박</summary>
+    <div class="exp-body">
+      <div class="exchange">
+        <div class="atk">
+          <blockquote>"학폭 업무 기피가 심각하니 유인책이 필요하다."</blockquote>
+        </div>
+        <div class="def">
+          문제 본질은 <strong>업무 과중</strong>입니다. 가산점 0.5점이 스트레스·법적 분쟁·민원을 보상 못합니다. 실효 대책은 <strong>(1) 수업시수 감축, (2) 전담 행정인력, (3) 학폭법 개정</strong>. 가산점은 "알리바이"일 뿐입니다.
+        </div>
+      </div>
+
+      <div class="exchange">
+        <div class="atk">
+          <blockquote>"열심히 일하는 교사에게 혜택을 주는 게 왜 문제인가?"</blockquote>
+        </div>
+        <div class="def">
+          <strong>"열심히"를 누가 판단합니까?</strong> 학부모가 아니라 <strong>관리자</strong>입니다. 차등성과급 20년간 "교사 전문성 향상" 실증 연구 거의 없음. 매년 <span class="num">8만 명 이상</span> 균등분배 참여가 증거입니다.
+        </div>
+      </div>
+
+      <div class="exchange">
+        <div class="atk">
+          <blockquote>"가산점을 주지 않으면 누가 힘든 일을 맡나?"</blockquote>
+        </div>
+        <div class="def">
+          기피 원인은 <strong>법적 책임과 민원 폭주</strong>입니다. 가산점 1점으로 해결 안 됩니다. <strong>업무 경감·법적 보호·수업시수 감축</strong>이 실효성 있는 유인책입니다.
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <!-- 쟁점 B -->
+  <h3>🔴 쟁점 B. 학교장 권한 확대</h3>
+
+  <details class="expandable">
+    <summary>해당 항목 5건 보기</summary>
+    <div class="exp-body">
+      <table class="mini-table">
+        <thead><tr><th>번호</th><th>제안기관</th><th>내용</th></tr></thead>
+        <tbody>
+          <tr><td>일반23</td><td>창원사파고</td><td>근평 전보 반영</td></tr>
+          <tr><td>일반39</td><td>창원사파고</td><td>근평 2년 누가</td></tr>
+          <tr><td>일반43</td><td>거창연극고</td><td>퇴직예정자 유예 1→2년</td></tr>
+          <tr><td>일반44</td><td>거창연극고</td><td>학교장 유예 3→<strong>7년</strong></td></tr>
+          <tr><td>일반4</td><td>거창여중</td><td>겸무 "반드시 지원" 강제화</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
+
+  <details class="expandable">
+    <summary>핵심 공격 논리</summary>
+    <div class="exp-body">
+      <h4>① 유예기간 7년 확대의 구조적 문제</h4>
+      <ul class="item-list" style="padding-left:0;">
+        <li>유예는 <strong>교육과정 안정성</strong>을 위한 예외 장치</li>
+        <li>지역만기 12년에 근접한 <strong>7년</strong> = 사실상 <strong>준(準)고정 배치</strong></li>
+        <li>학교장이 "자기가 쓰기 편한 교사"를 7년 확보</li>
+        <li>전교조 일반40·41(4→3년 완화)과 정반대</li>
+      </ul>
+
+      <h4>② 근평 반영의 구조적 문제</h4>
+      <ul class="item-list" style="padding-left:0;">
+        <li>근평은 관리자 평정이 지배적 (동료 다면평가 비중 낮음)</li>
+        <li>근평 전보 반영 = <strong>"학교장 권력 = 인사 권력"</strong></li>
+      </ul>
+
+      <h4>③ 겸무 강제화의 문제</h4>
+      <ul class="item-list" style="padding-left:0;">
+        <li>강제 규정은 교사 <strong>교육적 자기결정권</strong> 박탈</li>
+        <li>거부에는 통상 합당한 사유(수업 준비·돌봄·건강) 존재</li>
+        <li>강제보다 유인책(수당·수업시수 감면)이 바람직</li>
+      </ul>
+    </div>
+  </details>
+
+  <details class="expandable">
+    <summary>예상 반박 3건 + 재반박</summary>
+    <div class="exp-body">
+      <div class="exchange">
+        <div class="atk">
+          <blockquote>"학교 운영 안정성을 위해 학교장 권한이 필요하다."</blockquote>
+        </div>
+        <div class="def">
+          학교 안정성은 <strong>공동체의 민주적 운영</strong>에서 나오지 학교장 재량에서 나오지 않습니다. 재량이 클수록 <strong>"내 사람 챙기기", 갑질, 인사 불이익</strong> 부작용 커집니다. 이번 개정안에 <strong>갑질·성희롱 피해자 보호 조항 신설 요구</strong>(일52·53·54)가 많은 것 자체가 현 학교장 권력이 과하다는 방증입니다.
+        </div>
+      </div>
+
+      <div class="exchange">
+        <div class="atk">
+          <blockquote>"대안학교는 안정적 배치를 위해 긴 유예가 필요하다."</blockquote>
+        </div>
+        <div class="def">
+          취지는 이해하지만 <strong>7년은 과도</strong>합니다. 대안: <strong>(1) 초빙·전보특례 활용, (2) 학운위 심의 의무화, (3) 승인 주체 교육청 일원화.</strong> 학교장 단독 판단으로 7년을 묶는 건 공정성 담보 불가.
+        </div>
+      </div>
+
+      <div class="exchange">
+        <div class="atk">
+          <blockquote>"겸무 협조 안 하는 교사 때문에 소규모 학교가 힘들다."</blockquote>
+        </div>
+        <div class="def">
+          공감합니다. 다만 <strong>강제보다 유인책</strong>이 교육적입니다. 겸무 기피 원인(이동 피로·행정 부담·수당 부족)을 해결하지 않고 강제하면 <strong>질 낮은 수업</strong>이 양산됩니다.
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <!-- 쟁점 C -->
+  <h3>🔴 쟁점 C. 도시 쏠림 심화</h3>
+
+  <details class="expandable">
+    <summary>해당 항목 3건 보기</summary>
+    <div class="exp-body">
+      <table class="mini-table">
+        <thead><tr><th>번호</th><th>제안기관</th><th>내용</th></tr></thead>
+        <tbody>
+          <tr><td>가산점2</td><td>욕지중</td><td>상한점 <strong>1.8→2.0</strong></td></tr>
+          <tr><td>가산점3</td><td>통영여중</td><td>상한점 <strong>1.8→2.0</strong></td></tr>
+          <tr><td>일반28</td><td>김해여고</td><td>자공고 2.0 전보가산점 신설</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
+
+  <details class="expandable">
+    <summary>핵심 공격 논리 + 재반박</summary>
+    <div class="exp-body">
+      <h4>① 도시 가산점 상향의 역설</h4>
+      <ul class="item-list" style="padding-left:0;">
+        <li>현행 1.8점도 <strong>도시 근무만으로 도달 가능</strong></li>
+        <li>2.0 상향 시 도서벽지는 신규·저연차만 배치, 경력 도시 집중</li>
+        <li>제안 취지(욕지중·통영여중)는 정당, <strong>해법이 잘못됨</strong></li>
+      </ul>
+
+      <h4>② 자공고 2.0의 문제</h4>
+      <ul class="item-list" style="padding-left:0;">
+        <li>경쟁·서열화 고교정책의 산물</li>
+        <li>전보 우대 시 자공고 쏠림 가속</li>
+        <li>이미 승진가산점 인정 중 → 전보까지 추가는 과도</li>
+      </ul>
+
+      <div class="exchange">
+        <div class="atk">
+          <blockquote>"상한점을 올려야 도서벽지에 경력교사가 간다."</blockquote>
+        </div>
+        <div class="def">
+          <strong>논리가 반대로 되어 있습니다.</strong> 도시에서 상한 채우고 끝. 진짜 해법: <strong>도서벽지 수당 현실화 / 근무연한 우대 / 도서벽지 가산점 상향(도시가 아님) / 신규 배치 예외조항 삭제</strong>.
+        </div>
+      </div>
+
+      <div class="exchange">
+        <div class="atk">
+          <blockquote>"자공고 운영은 힘드니 우대가 필요하다."</blockquote>
+        </div>
+        <div class="def">
+          힘들다면 <strong>수당·업무 감축</strong>으로 해결해야지 인사 권한으로 보상은 부적절. 교사를 정책 도구로 만드는 효과. 연구시범학교 0.5→0.3 하향(일29)과 역행합니다.
+        </div>
+      </div>
+    </div>
+  </details>
+
+</div>
+
+<!-- ============================================= -->
+<!-- 탭 3: 방어 (전교조 제안 방어 10항목) -->
+<!-- ============================================= -->
+<div class="view" id="view-defense">
+
+  <h2 class="section-title"><span class="eyebrow">CHAPTER · DEFENSE</span>전교조 제안 방어 10항목</h2>
+
+  <div class="warn-box">
+    <strong>⚠ 기본 원칙</strong><br>
+    상대측이 전교조 제안을 공격하면 <strong>상대측 제안과의 일관성</strong>으로 되받아친다. "진단은 같다, 해법만 다르다"를 자주 쓴다. 전교조 제안 전부를 방어하지 말고 <strong>일부는 유연성</strong>을 보인다 (특히 일반20).
+  </div>
+
+  <details class="expandable">
+    <summary>🔵 01 · 일반1 — 소규모학교 10→6학급</summary>
+    <div class="exp-body">
+      <div class="exchange">
+        <div class="atk"><blockquote>"7~9학급 학교들이 지원 배제된다. 농어촌 죽이기."</blockquote></div>
+        <div class="def">
+          305교 중 9학급&lt; <span class="num">100교</span>, 6학급&lt; <span class="num">56교</span>. 현행이 전체 1/3 포괄 = "소규모" 개념의 <strong>형해화</strong>. 7~9학급은 "기타 교육과정 애로 학교"(3조3항 5호)로 개별 지원 가능. 일반2의 기준 구체화 제안과 한 묶음 = <strong>"현실화+사각지대 구체화"</strong>의 일관된 설계.
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <details class="expandable">
+    <summary>🔵 02 · 일반5 — 신규교사 도서벽지 제한 강화</summary>
+    <div class="exp-body">
+      <div class="exchange">
+        <div class="atk"><blockquote>"예외 삭제하면 도서벽지는 누가? 비현실적 이상론."</blockquote></div>
+        <div class="def">
+          현재도 "불가피한 경우" 예외가 <strong>사실상 원칙처럼 운영</strong> 중. 통영·거창·합천(일8,10,11) 공통 증언. <em>예외조항 때문에 도서벽지가 신규교사 수련장</em>. 대안: 초빙교사제, 수당 현실화, 재근무 허용(일17·18·19). <strong>도서벽지 학생이야말로 경력 교사의 숙련된 지도</strong>가 필요.
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <details class="expandable">
+    <summary>🔵 03 · 일반7 — 구역·급지 10년 주기 재조정</summary>
+    <div class="exp-body">
+      <div class="exchange">
+        <div class="atk"><blockquote>"제도 불안정성, 예측가능성 훼손."</blockquote></div>
+        <div class="def">
+          "반드시 바꾼다"가 아니라 <strong>"10년마다 분석·검토, 필요 시 재조정"</strong>. 갑·을·병은 수십 년 전 생활권 기준. KTX·고속도로·신도시로 지형 바뀐 상황에서 반영 장치 없음이 비정상. 제안문에 <strong>"교원 의견 수렴"</strong> 명시 = 민주적 절차.
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <details class="expandable">
+    <summary>🔵 04 · 일반17 — 도서벽지 재전보 (승진가산점 제외)</summary>
+    <div class="exp-body">
+      <div class="exchange">
+        <div class="atk"><blockquote>"3년 제한 형해화, 소수 교사 도서벽지 고정."</blockquote></div>
+        <div class="def">
+          조건: <strong>"희망자 없는 경우"</strong>로 한정. 핵심은 <strong>"승진가산점 제외"</strong>로 이중 수혜 차단. 야로중·삼가중(일18·19)도 같은 취지 = <strong>현장 광범위 공감대</strong>.
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <details class="expandable" style="border-left:3px solid #d97706;">
+    <summary>⚠️ 05 · 일반20 — 사회적 물의 교사 하급지 전보</summary>
+    <div class="exp-body">
+      <div class="warn-box">
+        <strong>⚠ 무리하게 방어 금지. 유연성 카드로 활용.</strong>
+      </div>
+      <div class="exchange">
+        <div class="atk"><blockquote>"거리 처벌 합리적인가? 도서벽지 낙인화."</blockquote></div>
+        <div class="def">
+          취지는 "현행 하급지 전보의 제재 효과 미미" 인식. 다만 도서벽지 낙인화 우려 인정하고 <strong>"별도 연수·재교육 경로 우선"</strong>이라는 수정 의견을 수용한다고 언급. 한발 물러서며 <strong>전체 논의의 신뢰성을 높이는 카드</strong>.
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <details class="expandable">
+    <summary>🔵 06 · 일반29 — 연구시범학교 0.5→0.3 하향</summary>
+    <div class="exp-body">
+      <div class="exchange">
+        <div class="atk"><blockquote>"연구학교 기피 심화."</blockquote></div>
+        <div class="def">
+          담임 <span class="num">0.2</span> / 부장 <span class="num">0.4</span> / 연구 <span class="num">0.5</span>. <strong>매일 학생 대면하는 담임·부장이 낮게 평가되는 구조</strong>는 합리성 약함. 연구 부담은 소수 보직자 집중인데 전체 0.5 = 무임승차. <br><br>
+          <strong>🎯 역공:</strong> "그럼 자공고 2.0 전보가산점 신설(일28)은?"
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <details class="expandable">
+    <summary>🔵 07 · 일반40·41 — 초빙·전보특례 4→3년</summary>
+    <div class="exp-body">
+      <div class="exchange">
+        <div class="atk"><blockquote>"학교장이 모신 사람. 제도 취지 훼손."</blockquote></div>
+        <div class="def">
+          초빙교사제는 <strong>학교장이 "자기 사람"을 데려오는 통로</strong>로 악용. 4년은 <strong>장기 종속 강제</strong>. 최저근무연한 2년 대비 3년도 이미 <strong>1.5배 의무</strong>. 학운위 심의 예외는 유지됨.
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <details class="expandable">
+    <summary>🔵 08 · 일반42 — 소수과목 전보유예 3년 신설</summary>
+    <div class="exp-body">
+      <div class="exchange">
+        <div class="atk"><blockquote>"특정 교과 특혜."</blockquote></div>
+        <div class="def">
+          소수과목·특성화 전문교과는 전보 가능 학교 극히 제한. 현행은 학교장 재량·비공식 처리에 의존. 제안에 <strong>"학교장 의견만으로 결정하지 아니하고 교육청에서 결정"</strong> 명시 = <strong>투명성 제고</strong>. 쟁점 B와 정반대 방향.
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <details class="expandable">
+    <summary>🔵 09 · 일반46 — 수석교사 학교군 3배수 확보</summary>
+    <div class="exp-body">
+      <div class="exchange">
+        <div class="atk"><blockquote>"행정 부담, 특혜 요구."</blockquote></div>
+        <div class="def">
+          현재는 수석교사가 <strong>인맥·학교장 부탁</strong>으로 배치 구하는 비공식 관행. 초·중등교육법 제19조는 수석교사를 교장·교감과 나란히 <strong>법정 직위</strong>로 규정. 투명한 절차 마련은 특혜가 아니라 의무.
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <details class="expandable">
+    <summary>🔵 10 · 일반51·53·54 — 피해교원 비정기전보</summary>
+    <div class="exp-body">
+      <div class="exchange">
+        <div class="atk"><blockquote>"갑질' 같은 포괄 개념은 관리자 공격 도구."</blockquote></div>
+        <div class="def">
+          판단 근거는 <strong>"교권보호위·고충심사·감사·조사 결과 등 객관적 자료"</strong>. 공식 절차 거친 사실 확인. 법령 근거: <strong>직장내 괴롭힘 금지법 / 교육공무원법 / 양성평등기본법 제31조의2</strong>.<br><br>
+          <strong>🎯 핵심 역공:</strong> 경남교육청 민주시민교육과도 <strong>성희롱 피해자 보호 비정기전보 신설(일52)</strong> 요구. 교육청 자체가 공감하는데 전교조만 "정치적"이라 공격하면 일관성 없음.
+        </div>
+      </div>
+    </div>
+  </details>
+
+</div>
+
+<!-- ============================================= -->
+<!-- 탭 4: 체크리스트 -->
+<!-- ============================================= -->
+<div class="view" id="view-check">
+
+  <h2 class="section-title"><span class="eyebrow">CHAPTER · CHECK</span>협의회 직전 최종 점검</h2>
+
+  <p style="color:var(--gray); font-size:13px; margin-bottom:16px;">✨ 항목을 탭하면 체크/해제됩니다 (기록은 저장되지 않아요)</p>
+
+  <div class="checklist">
+    <h4>📝 발언 전 확인</h4>
+    <ul>
+      <li>오프닝 3문장(3대 쟁점) 암기 완료</li>
+      <li>5대 핵심 멘트 암기 완료</li>
+      <li>핵심 수치 4개 확인 (305/100/56, 8만8천, 40%, 0.2/0.4/0.5)</li>
+      <li>요약 탭 발언 전 다시 보기</li>
+      <li>경남지부 의견서 원본 휴대 (일1·2·5·7·17·29·40·41·42·46·51·53·54 표시)</li>
+      <li>파일 원본 항목번호 확인 가능 상태</li>
+    </ul>
+  </div>
+
+  <div class="checklist">
+    <h4>🎭 발언 태도</h4>
+    <ul>
+      <li>반대보다 <strong>대안 제시</strong> 프레임 유지</li>
+      <li>제안 학교 취지는 <strong>먼저 인정</strong>하고 방법론 비판</li>
+      <li>상대측 제안을 <strong>"해당 조항"</strong>으로 지칭 (학교명 ❌)</li>
+      <li>"전교조 입장상"이 아닌 <strong>"경남 교육의 관점에서"</strong></li>
+      <li>수세 시 <strong>"진단은 같다, 해법만 다르다"</strong> 활용</li>
+      <li>일반20은 유연성 보이기 (유일한 양보 카드)</li>
+    </ul>
+  </div>
+
+  <div class="checklist">
+    <h4>🛡 반드시 지켜낼 3가지</h4>
+    <ul>
+      <li><strong>근평 전보 반영 저지</strong> (일23·39)</li>
+      <li><strong>학폭 가산점 확대 저지</strong> (일31~34·가1·4·5)</li>
+      <li><strong>유예 7년 확대 저지</strong> (일44)</li>
+    </ul>
+  </div>
+
+  <div class="checklist">
+    <h4>🚨 비상 시그널</h4>
+    <ul>
+      <li>감정 논쟁 유발 시 → <strong>"제도 설계 원칙으로 돌아가시죠"</strong></li>
+      <li>전교조 색채 공격 시 → <strong>"경남 학생·교원 모두를 위한 자리"</strong></li>
+      <li>시간 부족 시 → 핵심 멘트 1개 + <strong>"서면 의견 제출"</strong></li>
+      <li>완전 열세 시 → <strong>"표결 전 숙의 시간 요청"</strong></li>
+    </ul>
+  </div>
+
+  <!-- 결의 박스 -->
+  <div class="mantra-card" style="margin-top: 30px;">
+    <div class="header-text">🎯 FINAL MESSAGE</div>
+    <p style="font-family: 'Noto Serif KR', serif; font-size: 16px; font-weight: 600; line-height: 1.6; padding: 8px 0;">
+      협력의 학교를 지키는 것.<br>
+      관리자의 학교가 아니라 교사의 학교를 지키는 것.<br>
+      도시가 아니라 경남 전체를 지키는 것.
+    </p>
+  </div>
+
+</div>
+
+</div><!-- .content -->
+
+<!-- 최상단 버튼 -->
+<button class="top-btn" id="topBtn" aria-label="맨 위로">↑</button>
+
+<!-- 하단 플로팅 네비 -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" data-view="quick">
+    <span class="icon">⚡</span>
+    <span>요약</span>
+  </button>
+  <button class="nav-btn" data-view="attack">
+    <span class="icon">🎯</span>
+    <span>공격</span>
+  </button>
+  <button class="nav-btn" data-view="defense">
+    <span class="icon">🛡</span>
+    <span>방어</span>
+  </button>
+  <button class="nav-btn" data-view="check">
+    <span class="icon">✅</span>
+    <span>체크</span>
+  </button>
+</nav>
+
+<script>
+  // 탭 전환 로직
+  const tabButtons = document.querySelectorAll('.tab-btn, .nav-btn');
+  const views = document.querySelectorAll('.view');
+
+  function switchView(viewName) {
+    views.forEach(v => v.classList.toggle('active', v.id === `view-${viewName}`));
+    tabButtons.forEach(b => b.classList.toggle('active', b.dataset.view === viewName));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => switchView(btn.dataset.view));
+  });
+
+  // 체크리스트 토글
+  document.querySelectorAll('.checklist ul li').forEach(li => {
+    li.addEventListener('click', () => li.classList.toggle('checked'));
+  });
+
+  // 최상단 버튼
+  const topBtn = document.getElementById('topBtn');
+  window.addEventListener('scroll', () => {
+    topBtn.classList.toggle('show', window.scrollY > 400);
+  });
+  topBtn.addEventListener('click', () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  // 스와이프 제스처 (좌우 탭 전환)
+  let touchStartX = 0;
+  let touchEndX = 0;
+  const views_order = ['quick', 'attack', 'defense', 'check'];
+
+  document.addEventListener('touchstart', e => {
+    touchStartX = e.changedTouches[0].screenX;
+  }, { passive: true });
+
+  document.addEventListener('touchend', e => {
+    touchEndX = e.changedTouches[0].screenX;
+    const diff = touchEndX - touchStartX;
+    if (Math.abs(diff) < 80) return;
+    const current = document.querySelector('.view.active').id.replace('view-', '');
+    const idx = views_order.indexOf(current);
+    if (diff < 0 && idx < views_order.length - 1) switchView(views_order[idx + 1]);
+    else if (diff > 0 && idx > 0) switchView(views_order[idx - 1]);
+  }, { passive: true });
+</script>
+
+</body>
+</html>
